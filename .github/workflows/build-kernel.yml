@@ -222,6 +222,7 @@ jobs:
             echo "CONFIG_KPROBE_EVENTS=y" >> "$f"
             echo "CONFIG_OVERLAY_FS=y" >> "$f"
             echo "CONFIG_ASSIST_SU=y" >> "$f"
+            echo "CONFIG_VDSO32=n" >> "$f"
           fi
         done
         cd ../../..
