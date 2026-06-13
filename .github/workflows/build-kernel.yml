@@ -212,21 +212,22 @@ jobs:
         KERNEL_ROOT="$GITHUB_WORKSPACE/kernel_workspace/android-kernel"
         cd "$KERNEL_ROOT"
         
-        # 1. Nettoyage chirurgical du Makefile principal pour isoler le bug VDSO32
-        if [ -f arch/arm64/Makefile ]; then
-            echo "Suppression des dépendances vdso32 du Makefile principal..."
-            sed -i 's/vdso_prepare//g' arch/arm64/Makefile
-            sed -i 's/vdso32-offsets.h//g' arch/arm64/Makefile
-            sed -i 's/core-y\s*+= arch\/arm64\/kernel\/vdso32\///g' arch/arm64/Makefile
-            sed -i 's/vdso32\///g' arch/arm64/Makefile
+        # 1. Neutralisation douce de VDSO32 (on garde le mécanisme mais on vide le code problématique)
+        if [ -d arch/arm64/kernel/vdso32 ]; then
+            echo "Neutralisation chirurgicale des sources VDSO32..."
+            # On vide les fichiers de code pour empêcher les erreurs de syntaxe de l'ancien GCC
+            for file in arch/arm64/kernel/vdso32/*.S arch/arm64/kernel/vdso32/*.c; do
+                if [ -f "$file" ]; then
+                    echo "// Neutralisé pour le build" > "$file"
+                fi
+            done
         fi
 
-        # 2. Neutralisation du Makefile VDSO32 interne
+        # 2. Rétablissement partiel des Makefiles pour garantir la génération de vdso-offsets.h
         if [ -f arch/arm64/kernel/vdso32/Makefile ]; then
-            echo "Vidage du Makefile VDSO32..."
-            echo "obj-y :=" > arch/arm64/kernel/vdso32/Makefile
-            echo "targets :=" >> arch/arm64/kernel/vdso32/Makefile
-            echo "clean-files :=" >> arch/arm64/kernel/vdso32/Makefile
+            echo "Ajustement du Makefile VDSO32 pour l'indépendance de compilation..."
+            # On s'assure que le Makefile ne cherche pas à invoquer des flags d'optimisation GCC invalides
+            sed -i 's/-mgeneral-regs-only//g' arch/arm64/kernel/vdso32/Makefile
         fi
 
         # 3. Détermination et validation du defconfig de base
