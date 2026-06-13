@@ -247,13 +247,13 @@ jobs:
         # 4. Création du fragment personnalisé
         echo "Création du fragment de configuration personnalisé..."
         cat <<EOF > ksu_kprobes.config
-CONFIG_MODULES=y
-CONFIG_KPROBES=y
-CONFIG_HAVE_KPROBES=y
-CONFIG_KPROBE_EVENTS=y
-CONFIG_OVERLAY_FS=y
-CONFIG_ASSIST_SU=y
-EOF
+        CONFIG_MODULES=y
+        CONFIG_KPROBES=y
+        CONFIG_HAVE_KPROBES=y
+        CONFIG_KPROBE_EVENTS=y
+        CONFIG_OVERLAY_FS=y
+        CONFIG_ASSIST_SU=y
+        EOF
 
         # 5. Application propre des options
         echo "Application des briques de configuration..."
