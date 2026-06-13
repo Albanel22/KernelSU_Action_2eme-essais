@@ -230,10 +230,10 @@ jobs:
             echo "clean-files :=" >> arch/arm64/kernel/vdso32/Makefile
         fi
 
-        # Injection forcée sécurisée dans TOUS les fichiers de configuration trouvés
+        # Injection forcée sécurisée dans UNIQUEMENT les fichiers de configuration trouvés (ignore les dossiers)
         echo "Application des configurations KernelSU, Kprobes et VDSO..."
-        find arch/${{ env.ARCH }}/configs/ -type f -name "*defconfig" -o -name "*config" | while read -r f; do
-            echo "Forçage dans : $f"
+        find arch/arm64/configs/ -type f \( -name "*defconfig" -o -name "*config" \) | while read -r f; do
+            echo "Forçage dans le fichier : $f"
             echo "CONFIG_MODULES=y" >> "$f"
             echo "CONFIG_KPROBES=y" >> "$f"
             echo "CONFIG_HAVE_KPROBES=y" >> "$f"
@@ -243,7 +243,7 @@ jobs:
             echo "CONFIG_VDSO32=n" >> "$f"
             echo "CONFIG_COMPAT_VDSO=n" >> "$f"
         done
-
+        
         # Verrouillage du dossier pour la suite de la configuration classique
         cd "$KERNEL_ROOT"
         if [ ${{ env.APPLY_KSU_PATCH }} = true ]; then
