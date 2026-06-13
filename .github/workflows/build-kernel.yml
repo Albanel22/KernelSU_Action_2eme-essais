@@ -229,24 +229,27 @@ jobs:
             echo "clean-files :=" >> arch/arm64/kernel/vdso32/Makefile
         fi
 
-        # 3. Localisation dynamique du fichier de configuration (Sécurité arborescence)
+        # 3. Détermination et validation du defconfig de base
         CONFIG_NAME=$(basename "${{ env.KERNEL_CONFIG }}")
-        echo "Recherche du fichier de configuration : $CONFIG_NAME..."
-        
         REAL_CONFIG_PATH=$(find arch/arm64/configs/ -type f -name "$CONFIG_NAME" | head -n 1)
+        
         if [ -z "$REAL_CONFIG_PATH" ]; then
-            echo "⚠️ ALERTE : Impossible de trouver le fichier '$CONFIG_NAME' !"
-            echo "Voici la liste de tous les fichiers de configuration valides dans ce noyau :"
-            find arch/arm64/configs/ -type f \( -name "*defconfig" -o -name "*config" \) | sort
+            echo "ERREUR : Impossible de trouver le fichier de base $CONFIG_NAME"
             exit 1
-        else
-            echo "Fichier de configuration trouvé : $REAL_CONFIG_PATH"
-            TARGET_CONFIG="$REAL_CONFIG_PATH"
+        fi
+        TARGET_CONFIG="$REAL_CONFIG_PATH"
+        echo "Fichier de configuration de base sélectionné : $TARGET_CONFIG"
+
+        # 4. Injection des configurations spécifiques à l'appareil Kiev de Motorola
+        MOTO_KIEV_CONFIG="arch/arm64/configs/vendor/ext_config/kiev-default.config"
+        if [ -f "$MOTO_KIEV_CONFIG" ]; then
+            echo "Fusion de la configuration spécifique Kiev ($MOTO_KIEV_CONFIG)..."
+            cat "$MOTO_KIEV_CONFIG" >> "$TARGET_CONFIG"
         fi
 
-        # 4. Création du fragment personnalisé
-        echo "Création du fragment de configuration personnalisé..."
-        cat <<EOF > ksu_kprobes.config
+        # 5. Création et injection du fragment personnalisé (KernelSU + Kprobes)
+        echo "Création et injection du fragment de configuration KernelSU..."
+        cat <<EOF >> "$TARGET_CONFIG"
         CONFIG_MODULES=y
         CONFIG_KPROBES=y
         CONFIG_HAVE_KPROBES=y
@@ -255,11 +258,7 @@ jobs:
         CONFIG_ASSIST_SU=y
         EOF
 
-        # 5. Application propre des options
-        echo "Application des briques de configuration..."
-        cat ksu_kprobes.config >> "$TARGET_CONFIG"
-
-        # 6. Suite des configurations conditionnelles
+        # 6. Suite des configurations conditionnelles du workflow
         if [ "${{ env.APPLY_KSU_PATCH }}" = "true" ]; then
             bash $GITHUB_WORKSPACE/patches/patches.sh
             if grep -q "CONFIG_KSU" "$TARGET_CONFIG"; then
