@@ -235,23 +235,25 @@ jobs:
         
         REAL_CONFIG_PATH=$(find arch/arm64/configs/ -type f -name "$CONFIG_NAME" | head -n 1)
         if [ -z "$REAL_CONFIG_PATH" ]; then
-            echo "ERREUR : Impossible de trouver le fichier $CONFIG_NAME"
+            echo "⚠️ ALERTE : Impossible de trouver le fichier '$CONFIG_NAME' !"
+            echo "Voici la liste de tous les fichiers de configuration valides dans ce noyau :"
+            find arch/arm64/configs/ -type f \( -name "*defconfig" -o -name "*config" \) | sort
             exit 1
         else
             echo "Fichier de configuration trouvé : $REAL_CONFIG_PATH"
             TARGET_CONFIG="$REAL_CONFIG_PATH"
         fi
 
-        # 4. Création du fragment (ATTENTION : Chaque config a sa ligne, EOF est collé au début !)
+        # 4. Création du fragment personnalisé
         echo "Création du fragment de configuration personnalisé..."
         cat <<EOF > ksu_kprobes.config
-        CONFIG_MODULES=y
-        CONFIG_KPROBES=y
-        CONFIG_HAVE_KPROBES=y
-        CONFIG_KPROBE_EVENTS=y
-        CONFIG_OVERLAY_FS=y
-        CONFIG_ASSIST_SU=y
-        EOF
+CONFIG_MODULES=y
+CONFIG_KPROBES=y
+CONFIG_HAVE_KPROBES=y
+CONFIG_KPROBE_EVENTS=y
+CONFIG_OVERLAY_FS=y
+CONFIG_ASSIST_SU=y
+EOF
 
         # 5. Application propre des options
         echo "Application des briques de configuration..."
