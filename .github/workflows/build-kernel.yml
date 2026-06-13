@@ -233,20 +233,17 @@ jobs:
         CONFIG_NAME=$(basename "${{ env.KERNEL_CONFIG }}")
         echo "Recherche du fichier de configuration : $CONFIG_NAME..."
         
-        # On cherche le fichier dans arch/arm64/configs/
         REAL_CONFIG_PATH=$(find arch/arm64/configs/ -type f -name "$CONFIG_NAME" | head -n 1)
 
         if [ -z "$REAL_CONFIG_PATH" ]; then
-            echo "ERREUR : Impossible de trouver le fichier $CONFIG_NAME dans arch/arm64/configs/"
-            echo "Fichiers disponibles dans arch/arm64/configs/ :"
-            ls -R arch/arm64/configs/
+            echo "ERREUR : Impossible de trouver le fichier $CONFIG_NAME"
             exit 1
         else
-            echo "Fichier de configuration trouvé avec succès : $REAL_CONFIG_PATH"
+            echo "Fichier de configuration trouvé : $REAL_CONFIG_PATH"
             TARGET_CONFIG="$REAL_CONFIG_PATH"
         fi
 
-        # 4. Création d'un mini-fragment de configuration propre
+        # 4. Création du fragment (ATTENTION : Le EOF final doit être collé au début de la ligne !)
         echo "Création du fragment de configuration personnalisé..."
         cat <<EOF > ksu_kprobes.config
 CONFIG_MODULES=y
@@ -258,11 +255,11 @@ CONFIG_ASSIST_SU=y
 EOF
 
         # 5. Application propre des options
-        echo "Application des options de base dans $TARGET_CONFIG"
+        echo "Application des briques de configuration..."
         cat ksu_kprobes.config >> "$TARGET_CONFIG"
 
-        # 6. Suite des scripts de configuration classiques de ton workflow
-        if [ ${{ env.APPLY_KSU_PATCH }} = true ]; then
+        # 6. Suite des configurations conditionnelles
+        if [ "${{ env.APPLY_KSU_PATCH }}" = "true" ]; then
             bash $GITHUB_WORKSPACE/patches/patches.sh
             if grep -q "CONFIG_KSU" "$TARGET_CONFIG"; then
                 sed -i 's/# CONFIG_KSU is not set/CONFIG_KSU=y/g' "$TARGET_CONFIG"
@@ -271,16 +268,16 @@ EOF
                 echo "CONFIG_KSU=y" >> "$TARGET_CONFIG"
             fi
         fi
-        if [ ${{ env.ADD_OVERLAYFS_CONFIG }} = true ]; then
+        if [ "${{ env.ADD_OVERLAYFS_CONFIG }}" = "true" ]; then
             echo "CONFIG_OVERLAY_FS=y" >> "$TARGET_CONFIG"
         fi
-        if [ ${{ env.DISABLE-LTO }} = true ]; then
+        if [ "${{ env.DISABLE-LTO }}" = "true" ]; then
             sed -i 's/CONFIG_LTO=y/CONFIG_LTO=n/' "$TARGET_CONFIG"
             sed -i 's/CONFIG_LTO_CLANG=y/CONFIG_LTO_CLANG=n/' "$TARGET_CONFIG"
             sed -i 's/CONFIG_THINLTO=y/CONFIG_THINLTO=n/' "$TARGET_CONFIG"
             echo "CONFIG_LTO_NONE=y" >> "$TARGET_CONFIG"
         fi
-        if [ ${{ env.DISABLE_CC_WERROR }} = true ]; then
+        if [ "${{ env.DISABLE_CC_WERROR }}" = "true" ]; then
             echo "CONFIG_CC_WERROR=n" >> "$TARGET_CONFIG"
         fi
     - name: Setup ccache
