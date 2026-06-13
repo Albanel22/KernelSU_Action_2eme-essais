@@ -207,11 +207,22 @@ jobs:
         KSU_VERSION=$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 10200)
         echo "UPLOADNAME=-KernelSU_$KSU_VERSION" >> $GITHUB_ENV
 
-    - name: Setup Configuration for Kernel
+    - - name: Setup Configuration for Kernel
       run: |
-        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        # Définition d'une variable racine absolue pour sécuriser les déplacements
+        KERNEL_ROOT="$GITHUB_WORKSPACE/kernel_workspace/android-kernel"
+        cd "$KERNEL_ROOT"
         
-        # Neutralisation chirurgicale du Makefile VDSO32
+        # Supprimer la dépendance des offsets et de la préparation vdso32 dans le Makefile arm64 principal
+        if [ -f arch/arm64/Makefile ]; then
+            echo "Suppression des dépendances vdso32 du Makefile principal..."
+            sed -i 's/vdso_prepare//g' arch/arm64/Makefile
+            sed -i 's/vdso32-offsets.h//g' arch/arm64/Makefile
+            # Sécurité majeure : retire l'appel du dossier s'il est présent
+            sed -i 's/core-y\s*+= arch\/arm64\/kernel\/vdso32\///g' arch/arm64/Makefile
+        fi
+
+        # Neutralisation chirurgicale du Makefile VDSO32 interne
         if [ -f arch/arm64/kernel/vdso32/Makefile ]; then
             echo "Vidage du Makefile VDSO32 pour sauter sa compilation..."
             echo "obj-y :=" > arch/arm64/kernel/vdso32/Makefile
@@ -219,11 +230,10 @@ jobs:
             echo "clean-files :=" >> arch/arm64/kernel/vdso32/Makefile
         fi
 
-        # Injection forcée pour Motorola (kiev / sm8250) dans TOUS les fichiers configs possibles
-        cd arch/${{ env.ARCH }}/configs/
-        for f in *defconfig vendor/*config; do
-          if [ -f "$f" ]; then
-            echo "Forçage des configs KSU et Kprobes dans : $f"
+        # Injection forcée sécurisée dans TOUS les fichiers de configuration trouvés
+        echo "Application des configurations KernelSU, Kprobes et VDSO..."
+        find arch/${{ env.ARCH }}/configs/ -type f -name "*defconfig" -o -name "*config" | while read -r f; do
+            echo "Forçage dans : $f"
             echo "CONFIG_MODULES=y" >> "$f"
             echo "CONFIG_KPROBES=y" >> "$f"
             echo "CONFIG_HAVE_KPROBES=y" >> "$f"
@@ -232,12 +242,10 @@ jobs:
             echo "CONFIG_ASSIST_SU=y" >> "$f"
             echo "CONFIG_VDSO32=n" >> "$f"
             echo "CONFIG_COMPAT_VDSO=n" >> "$f"
-          fi
         done
-        cd ../../..
 
-        # Suite de la configuration classique du script
-        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        # Verrouillage du dossier pour la suite de la configuration classique
+        cd "$KERNEL_ROOT"
         if [ ${{ env.APPLY_KSU_PATCH }} = true ]; then
             bash $GITHUB_WORKSPACE/patches/patches.sh
             if grep -q "CONFIG_KSU" arch/${{ env.ARCH }}/configs/${{ env.KERNEL_CONFIG }}; then
@@ -259,7 +267,6 @@ jobs:
         if [ ${{ env.DISABLE_CC_WERROR }} = true ]; then
             echo "CONFIG_CC_WERROR=n" >> arch/${{ env.ARCH }}/configs/${{ env.KERNEL_CONFIG }}
         fi
-
     - name: Setup ccache
       if: env.ENABLE_CCACHE == 'true'
       uses: hendrikmuhs/ccache-action@v1.2
