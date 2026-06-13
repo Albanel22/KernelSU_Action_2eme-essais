@@ -207,7 +207,7 @@ jobs:
         KSU_VERSION=$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 10200)
         echo "UPLOADNAME=-KernelSU_$KSU_VERSION" >> $GITHUB_ENV
 
-    - - name: Setup Configuration for Kernel
+    - name: Setup Configuration for Kernel
       run: |
         # Définition d'une variable racine absolue pour sécuriser les déplacements
         KERNEL_ROOT="$GITHUB_WORKSPACE/kernel_workspace/android-kernel"
