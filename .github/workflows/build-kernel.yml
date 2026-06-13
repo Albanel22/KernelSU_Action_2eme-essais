@@ -209,21 +209,19 @@ jobs:
 
     - name: Setup Configuration for Kernel
       run: |
-        # Définition d'une variable racine absolue pour sécuriser les déplacements
         KERNEL_ROOT="$GITHUB_WORKSPACE/kernel_workspace/android-kernel"
         cd "$KERNEL_ROOT"
         
-        # Supprimer proprement l'appel au dossier vdso32 dans le Makefile arm64 principal
+        # 1. Nettoyage chirurgical du Makefile principal pour isoler le bug VDSO32
         if [ -f arch/arm64/Makefile ]; then
-            echo "Neutralisation des appels vdso32 dans le Makefile principal..."
+            echo "Suppression des dépendances vdso32 du Makefile principal..."
             sed -i 's/vdso_prepare//g' arch/arm64/Makefile
             sed -i 's/vdso32-offsets.h//g' arch/arm64/Makefile
-            # On empêche le Makefile de descendre dans le sous-dossier vdso32
             sed -i 's/core-y\s*+= arch\/arm64\/kernel\/vdso32\///g' arch/arm64/Makefile
             sed -i 's/vdso32\///g' arch/arm64/Makefile
         fi
 
-        # Neutralisation chirurgicale du Makefile VDSO32 interne
+        # 2. Neutralisation du Makefile VDSO32 interne
         if [ -f arch/arm64/kernel/vdso32/Makefile ]; then
             echo "Vidage du Makefile VDSO32..."
             echo "obj-y :=" > arch/arm64/kernel/vdso32/Makefile
@@ -231,40 +229,48 @@ jobs:
             echo "clean-files :=" >> arch/arm64/kernel/vdso32/Makefile
         fi
 
-        # Injection forcée saine (On NE force PLUS CONFIG_VDSO32=n)
-        echo "Application des configurations KernelSU et Kprobes..."
-        find arch/arm64/configs/ -type f \( -name "*defconfig" -o -name "*config" \) | while read -r f; do
-            echo "Forçage dans le fichier : $f"
-            echo "CONFIG_MODULES=y" >> "$f"
-            echo "CONFIG_KPROBES=y" >> "$f"
-            echo "CONFIG_HAVE_KPROBES=y" >> "$f"
-            echo "CONFIG_KPROBE_EVENTS=y" >> "$f"
-            echo "CONFIG_OVERLAY_FS=y" >> "$f"
-            echo "CONFIG_ASSIST_SU=y" >> "$f"
-        done
-        
-        # Verrouillage du dossier pour la suite de la configuration classique
-        cd "$KERNEL_ROOT"
+        # 3. Création d'un mini-fragment de configuration propre
+        echo "Création du fragment de configuration personnalisé..."
+        cat <<EOF > ksu_kprobes.config
+        CONFIG_MODULES=y
+        CONFIG_KPROBES=y
+        CONFIG_HAVE_KPROBES=y
+        CONFIG_KPROBE_EVENTS=y
+        CONFIG_OVERLAY_FS=y
+        CONFIG_ASSIST_SU=y
+        EOF
+
+        # 4. Application stricte UNIQUEMENT sur le fichier defconfig ciblé
+        TARGET_CONFIG="arch/arm64/configs/${{ env.KERNEL_CONFIG }}"
+        if [ -f "$TARGET_CONFIG" ]; then
+            echo "Application propre des options dans $TARGET_CONFIG"
+            cat ksu_kprobes.config >> "$TARGET_CONFIG"
+        else
+            echo "ERREUR : Le fichier de configuration spécifié est introuvable !"
+            exit 1
+        fi
+
+        # 5. Suite des scripts de configuration classiques de ton workflow
         if [ ${{ env.APPLY_KSU_PATCH }} = true ]; then
             bash $GITHUB_WORKSPACE/patches/patches.sh
-            if grep -q "CONFIG_KSU" arch/${{ env.ARCH }}/configs/${{ env.KERNEL_CONFIG }}; then
-                sed -i 's/# CONFIG_KSU is not set/CONFIG_KSU=y/g' arch/${{ env.ARCH }}/configs/${{ env.KERNEL_CONFIG }}
-                sed -i 's/CONFIG_KSU=n/CONFIG_KSU=y/g' arch/${{ env.ARCH }}/configs/${{ env.KERNEL_CONFIG }}
+            if grep -q "CONFIG_KSU" "$TARGET_CONFIG"; then
+                sed -i 's/# CONFIG_KSU is not set/CONFIG_KSU=y/g' "$TARGET_CONFIG"
+                sed -i 's/CONFIG_KSU=n/CONFIG_KSU=y/g' "$TARGET_CONFIG"
             else
-                echo "CONFIG_KSU=y" >> arch/${{ env.ARCH }}/configs/${{ env.KERNEL_CONFIG }}
+                echo "CONFIG_KSU=y" >> "$TARGET_CONFIG"
             fi
         fi
         if [ ${{ env.ADD_OVERLAYFS_CONFIG }} = true ]; then
-            echo "CONFIG_OVERLAY_FS=y" >> arch/${{ env.ARCH }}/configs/${{ env.KERNEL_CONFIG }}
+            echo "CONFIG_OVERLAY_FS=y" >> "$TARGET_CONFIG"
         fi
         if [ ${{ env.DISABLE-LTO }} = true ]; then
-            sed -i 's/CONFIG_LTO=y/CONFIG_LTO=n/' arch/${{ env.ARCH }}/configs/${{ env.KERNEL_CONFIG }}
-            sed -i 's/CONFIG_LTO_CLANG=y/CONFIG_LTO_CLANG=n/' arch/${{ env.ARCH }}/configs/${{ env.KERNEL_CONFIG }}
-            sed -i 's/CONFIG_THINLTO=y/CONFIG_THINLTO=n/' arch/${{ env.ARCH }}/configs/${{ env.KERNEL_CONFIG }}
-            echo "CONFIG_LTO_NONE=y" >> arch/${{ env.ARCH }}/configs/${{ env.KERNEL_CONFIG }}
+            sed -i 's/CONFIG_LTO=y/CONFIG_LTO=n/' "$TARGET_CONFIG"
+            sed -i 's/CONFIG_LTO_CLANG=y/CONFIG_LTO_CLANG=n/' "$TARGET_CONFIG"
+            sed -i 's/CONFIG_THINLTO=y/CONFIG_THINLTO=n/' "$TARGET_CONFIG"
+            echo "CONFIG_LTO_NONE=y" >> "$TARGET_CONFIG"
         fi
         if [ ${{ env.DISABLE_CC_WERROR }} = true ]; then
-            echo "CONFIG_CC_WERROR=n" >> arch/${{ env.ARCH }}/configs/${{ env.KERNEL_CONFIG }}
+            echo "CONFIG_CC_WERROR=n" >> "$TARGET_CONFIG"
         fi
     - name: Setup ccache
       if: env.ENABLE_CCACHE == 'true'
