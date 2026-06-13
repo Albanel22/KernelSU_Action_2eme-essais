@@ -212,25 +212,10 @@ jobs:
         KERNEL_ROOT="$GITHUB_WORKSPACE/kernel_workspace/android-kernel"
         cd "$KERNEL_ROOT"
         
-        # 1. Neutralisation douce de VDSO32 (on garde le mécanisme mais on vide le code problématique)
-        if [ -d arch/arm64/kernel/vdso32 ]; then
-            echo "Neutralisation chirurgicale des sources VDSO32..."
-            # On vide les fichiers de code pour empêcher les erreurs de syntaxe de l'ancien GCC
-            for file in arch/arm64/kernel/vdso32/*.S arch/arm64/kernel/vdso32/*.c; do
-                if [ -f "$file" ]; then
-                    echo "// Neutralisé pour le build" > "$file"
-                fi
-            done
-        fi
+        # 1. Restauration des fichiers potentiellement altérés par les anciens essais
+        git checkout HEAD arch/arm64/Makefile arch/arm64/kernel/vdso32/ 2>/dev/null || true
 
-        # 2. Rétablissement partiel des Makefiles pour garantir la génération de vdso-offsets.h
-        if [ -f arch/arm64/kernel/vdso32/Makefile ]; then
-            echo "Ajustement du Makefile VDSO32 pour l'indépendance de compilation..."
-            # On s'assure que le Makefile ne cherche pas à invoquer des flags d'optimisation GCC invalides
-            sed -i 's/-mgeneral-regs-only//g' arch/arm64/kernel/vdso32/Makefile
-        fi
-
-        # 3. Détermination et validation du defconfig de base
+        # 2. Détermination et validation du defconfig de base
         CONFIG_NAME=$(basename "${{ env.KERNEL_CONFIG }}")
         REAL_CONFIG_PATH=$(find arch/arm64/configs/ -type f -name "$CONFIG_NAME" | head -n 1)
         
@@ -241,12 +226,21 @@ jobs:
         TARGET_CONFIG="$REAL_CONFIG_PATH"
         echo "Fichier de configuration de base sélectionné : $TARGET_CONFIG"
 
-        # 4. Injection des configurations spécifiques à l'appareil Kiev de Motorola
+        # 3. Injection des configurations spécifiques à l'appareil Kiev de Motorola
         MOTO_KIEV_CONFIG="arch/arm64/configs/vendor/ext_config/kiev-default.config"
         if [ -f "$MOTO_KIEV_CONFIG" ]; then
             echo "Fusion de la configuration spécifique Kiev ($MOTO_KIEV_CONFIG)..."
             cat "$MOTO_KIEV_CONFIG" >> "$TARGET_CONFIG"
         fi
+
+        # 4. Désactivation complète de l'architecture 32 bits et du VDSO32 dans le defconfig
+        echo "Désactivation logicielle du sous-système VDSO32..."
+        sed -i 's/CONFIG_COMPAT=y/CONFIG_COMPAT=n/g' "$TARGET_CONFIG"
+        sed -i 's/CONFIG_VDSO32=y/CONFIG_VDSO32=n/g' "$TARGET_CONFIG"
+        
+        # Sécurité : On s'assure qu'ils ne soient pas réactivés
+        echo "CONFIG_COMPAT=n" >> "$TARGET_CONFIG"
+        echo "CONFIG_VDSO32=n" >> "$TARGET_CONFIG"
 
         # 5. Création et injection du fragment personnalisé (KernelSU + Kprobes)
         echo "Création et injection du fragment de configuration KernelSU..."
