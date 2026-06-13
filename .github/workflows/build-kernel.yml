@@ -229,28 +229,39 @@ jobs:
             echo "clean-files :=" >> arch/arm64/kernel/vdso32/Makefile
         fi
 
-        # 3. Création d'un mini-fragment de configuration propre
-        echo "Création du fragment de configuration personnalisé..."
-        cat <<EOF > ksu_kprobes.config
-        CONFIG_MODULES=y
-        CONFIG_KPROBES=y
-        CONFIG_HAVE_KPROBES=y
-        CONFIG_KPROBE_EVENTS=y
-        CONFIG_OVERLAY_FS=y
-        CONFIG_ASSIST_SU=y
-        EOF
+        # 3. Localisation dynamique du fichier de configuration (Sécurité arborescence)
+        CONFIG_NAME=$(basename "${{ env.KERNEL_CONFIG }}")
+        echo "Recherche du fichier de configuration : $CONFIG_NAME..."
+        
+        # On cherche le fichier dans arch/arm64/configs/
+        REAL_CONFIG_PATH=$(find arch/arm64/configs/ -type f -name "$CONFIG_NAME" | head -n 1)
 
-        # 4. Application stricte UNIQUEMENT sur le fichier defconfig ciblé
-        TARGET_CONFIG="arch/arm64/configs/${{ env.KERNEL_CONFIG }}"
-        if [ -f "$TARGET_CONFIG" ]; then
-            echo "Application propre des options dans $TARGET_CONFIG"
-            cat ksu_kprobes.config >> "$TARGET_CONFIG"
-        else
-            echo "ERREUR : Le fichier de configuration spécifié est introuvable !"
+        if [ -z "$REAL_CONFIG_PATH" ]; then
+            echo "ERREUR : Impossible de trouver le fichier $CONFIG_NAME dans arch/arm64/configs/"
+            echo "Fichiers disponibles dans arch/arm64/configs/ :"
+            ls -R arch/arm64/configs/
             exit 1
+        else
+            echo "Fichier de configuration trouvé avec succès : $REAL_CONFIG_PATH"
+            TARGET_CONFIG="$REAL_CONFIG_PATH"
         fi
 
-        # 5. Suite des scripts de configuration classiques de ton workflow
+        # 4. Création d'un mini-fragment de configuration propre
+        echo "Création du fragment de configuration personnalisé..."
+        cat <<EOF > ksu_kprobes.config
+CONFIG_MODULES=y
+CONFIG_KPROBES=y
+CONFIG_HAVE_KPROBES=y
+CONFIG_KPROBE_EVENTS=y
+CONFIG_OVERLAY_FS=y
+CONFIG_ASSIST_SU=y
+EOF
+
+        # 5. Application propre des options
+        echo "Application des options de base dans $TARGET_CONFIG"
+        cat ksu_kprobes.config >> "$TARGET_CONFIG"
+
+        # 6. Suite des scripts de configuration classiques de ton workflow
         if [ ${{ env.APPLY_KSU_PATCH }} = true ]; then
             bash $GITHUB_WORKSPACE/patches/patches.sh
             if grep -q "CONFIG_KSU" "$TARGET_CONFIG"; then
