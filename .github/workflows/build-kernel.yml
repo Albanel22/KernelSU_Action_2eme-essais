@@ -211,6 +211,14 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         
+        # Neutralisation chirurgicale du Makefile VDSO32
+        if [ -f arch/arm64/kernel/vdso32/Makefile ]; then
+            echo "Vidage du Makefile VDSO32 pour sauter sa compilation..."
+            echo "obj-y :=" > arch/arm64/kernel/vdso32/Makefile
+            echo "targets :=" >> arch/arm64/kernel/vdso32/Makefile
+            echo "clean-files :=" >> arch/arm64/kernel/vdso32/Makefile
+        fi
+
         # Injection forcée pour Motorola (kiev / sm8250) dans TOUS les fichiers configs possibles
         cd arch/${{ env.ARCH }}/configs/
         for f in *defconfig vendor/*config; do
@@ -223,6 +231,7 @@ jobs:
             echo "CONFIG_OVERLAY_FS=y" >> "$f"
             echo "CONFIG_ASSIST_SU=y" >> "$f"
             echo "CONFIG_VDSO32=n" >> "$f"
+            echo "CONFIG_COMPAT_VDSO=n" >> "$f"
           fi
         done
         cd ../../..
