@@ -342,14 +342,30 @@ jobs:
           export KSU_EXPECTED_HASH=${{ env.KSU_EXPECTED_HASH }}
         fi
         
-        # Génération du .config avec liaison explicite à l'architecture cible et STRIP correct
+        # 1. Génération de la configuration
         make O=out ARCH=${{ env.ARCH }} CC=clang CLANG_TRIPLE=aarch64-linux-gnu- STRIP=llvm-strip ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }} ${{ env.KERNEL_CONFIG }}
         
-        # Compilation avec injection globale de ccache (si activé) et llvm-strip
+        # 2. Tentative de compilation rapide (Multi-cœurs)
+        echo "========================================================="
+        echo " Lancement de la compilation principale (Multi-cœurs) "
+        echo "========================================================="
         if [ "${{ env.ENABLE_CCACHE }}" = "true" ]; then
-            make -j$(nproc --all) CC="ccache clang" CLANG_TRIPLE=aarch64-linux-gnu- STRIP=llvm-strip O=out ARCH=${{ env.ARCH }} ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }}
+            make -j$(nproc --all) CC="ccache clang" CLANG_TRIPLE=aarch64-linux-gnu- STRIP=llvm-strip O=out ARCH=${{ env.ARCH }} ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }} || MULTI_FAILED=true
         else
-            make -j$(nproc --all) CC=clang CLANG_TRIPLE=aarch64-linux-gnu- STRIP=llvm-strip O=out ARCH=${{ env.ARCH }} ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }}
+            make -j$(nproc --all) CC=clang CLANG_TRIPLE=aarch64-linux-gnu- STRIP=llvm-strip O=out ARCH=${{ env.ARCH }} ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }} || MULTI_FAILED=true
+        fi
+
+        # 3. Mode Secours (Mono-cœur) pour isoler l'erreur si échec
+        if [ "$MULTI_FAILED" = "true" ]; then
+            echo "========================================================="
+            echo " Échec détecté ! Relance en mode mono-cœur (-j1) pour "
+            echo " isoler la ligne d'erreur exacte...                      "
+            echo "========================================================="
+            if [ "${{ env.ENABLE_CCACHE }}" = "true" ]; then
+                make -j1 CC="ccache clang" CLANG_TRIPLE=aarch64-linux-gnu- STRIP=llvm-strip O=out ARCH=${{ env.ARCH }} ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }}
+            else
+                make -j1 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- STRIP=llvm-strip O=out ARCH=${{ env.ARCH }} ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }}
+            fi
         fi
 
     - name: Make Anykernel3
