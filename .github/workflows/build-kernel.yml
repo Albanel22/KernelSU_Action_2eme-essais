@@ -368,35 +368,43 @@ jobs:
         
         # 16. Injection propre du Hook KernelSU pour Noyau NON-GKI (fs/open.c)
         echo "Application du patch de hooking précis Non-GKI (fs/open.c)..."
-        FS_OPEN="fs/open.c"
-        if [ -f "$FS_OPEN" ]; then
-            # Nettoyage des essais précédents
-            sed -i '/ksu_handle_open/d' "$FS_OPEN"
+        if [ -f "fs/open.c" ]; then
+            sed -i '/ksu_handle_open/d' "fs/open.c"
+            sed -i '/int do_dentry_open(/,/^[}]/s/return 0;/{ extern int ksu_handle_open(struct file *file); ksu_handle_open(f); } return 0;/g' "fs/open.c"
+        fi
+
+        # 17. Injection globale des symboles VDSO32 manquants dans vdso.c
+        if [ -f "arch/arm64/kernel/vdso.c" ]; then
+            sed -i '1i char vdso32_start[] = {};\nchar vdso32_end[] = {};' "arch/arm64/kernel/vdso.c"
+        fi
+
+        # 18. Stub complet pour TOUS les Vendor Hooks Android manquants
+        echo "Génération des stubs de secours pour l'intégralité des Vendor Hooks..."
+        if [ -f "kernel/trace/trace.c" ]; then
+            # Nettoyage d'éventuels doublons
+            sed -i '/_tracepoint_android_vh_/d' "kernel/trace/trace.c"
             
-            # Injection sécurisée sur une seule ligne (évite les erreurs de syntaxe YAML)
-            sed -i '/int do_dentry_open(/,/^[}]/s/return 0;/{ extern int ksu_handle_open(struct file *file); ksu_handle_open(f); } return 0;/g' "$FS_OPEN"
-            
-            echo "[+] Hook KernelSU injecté avec succès dans fs/open.c"
+            # Injection de la liste exhaustive réclamée par LineageOS
+            echo -e '\n/* Secours Tracepoints GKI pour compilation Non-GKI */' >> "kernel/trace/trace.c"
+            echo 'struct tracepoint __tracepoint_android_vh_set_memory_ro;' >> "kernel/trace/trace.c"
+            echo 'struct tracepoint __tracepoint_android_vh_set_memory_x;' >> "kernel/trace/trace.c"
+            echo 'struct tracepoint __tracepoint_android_vh_check_file_open;' >> "kernel/trace/trace.c"
+            echo 'struct tracepoint __tracepoint_android_vh_check_mmap_file;' >> "kernel/trace/trace.c"
+            echo 'struct tracepoint __tracepoint_android_vh_set_memory_rw;' >> "kernel/trace/trace.c"
+            echo 'struct tracepoint __tracepoint_android_vh_set_memory_nx;' >> "kernel/trace/trace.c"
+            echo 'struct tracepoint __tracepoint_android_vh_check_bpf_syscall;' >> "kernel/trace/trace.c"
+            echo "[+] Les 7 tracepoints obsolètes ont été neutralisés."
+        fi
+
+        # 19. Forcer l'inclusion de KernelSU dans le système de build principal
+        echo "Liaison explicite de KernelSU dans le Makefile des drivers..."
+        if [ -f "drivers/Makefile" ]; then
+            if ! grep -q "kernelsu" "drivers/Makefile"; then
+                echo "obj-y += kernelsu/" >> "drivers/Makefile"
+                echo "[+] KernelSU ajouté manuellement au drivers/Makefile"
+            fi
         fi
         
-        # 17. Injection globale des symboles VDSO32 manquants directement dans vdso.c
-        echo "Application du patch de liaison finale pour vdso.c..."
-        VDSO_MAIN="arch/arm64/kernel/vdso.c"
-        if [ -f "$VDSO_MAIN" ]; then
-            sed -i '1i char vdso32_start[] = {};\nchar vdso32_end[] = {};' "$VDSO_MAIN"
-            echo "[+] Symboles vdso32 injectés directement dans le code source de vdso.c."
-        fi
-
-        # 18. Injection de symboles de secours pour les tracepoints BPF codés en dur (Non-GKI)
-        echo "Application du correctif de stub pour les tracepoints BPF manquants..."
-        TRACE_MAIN="kernel/trace/trace.c"
-        if [ -f "$TRACE_MAIN" ]; then
-            echo -e '\n/* Stubs de secours pour les tracepoints BPF (Compatibilité Non-GKI) */' >> "$TRACE_MAIN"
-            echo 'struct tracepoint __tracepoint_android_vh_set_memory_nx;' >> "$TRACE_MAIN"
-            echo 'struct tracepoint __tracepoint_android_vh_check_bpf_syscall;' >> "$TRACE_MAIN"
-            echo "[+] Symboles de secours injectés avec succès dans trace.c."
-        fi
-
     - name: Setup ccache
       if: env.ENABLE_CCACHE == 'true'
       uses: hendrikmuhs/ccache-action@v1.2
