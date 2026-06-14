@@ -387,6 +387,16 @@ jobs:
             echo "[+] Symboles vdso32 injectés directement dans le code source de vdso.c."
         fi
 
+        # 18. Injection de symboles de secours pour les tracepoints BPF codés en dur (Non-GKI)
+        echo "Application du correctif de stub pour les tracepoints BPF manquants..."
+        TRACE_MAIN="kernel/trace/trace.c"
+        if [ -f "$TRACE_MAIN" ]; then
+            echo -e '\n/* Stubs de secours pour les tracepoints BPF (Compatibilité Non-GKI) */' >> "$TRACE_MAIN"
+            echo 'struct tracepoint __tracepoint_android_vh_set_memory_nx;' >> "$TRACE_MAIN"
+            echo 'struct tracepoint __tracepoint_android_vh_check_bpf_syscall;' >> "$TRACE_MAIN"
+            echo "[+] Symboles de secours injectés avec succès dans trace.c."
+        fi
+
     - name: Setup ccache
       if: env.ENABLE_CCACHE == 'true'
       uses: hendrikmuhs/ccache-action@v1.2
