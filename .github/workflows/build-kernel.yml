@@ -366,18 +366,21 @@ jobs:
             echo "[+] Références à bengal retirées du Makefile des DTS."
         fi
         
-        # 16. Correctif d'injection manuelle pour Noyau NON-GKI (fs/open.c)
-        echo "Application du patch Non-GKI pour fs/open.c..."
+        # 16. Injection propre du Hook KernelSU pour Noyau NON-GKI (fs/open.c)
+        echo "Application du patch de hooking précis Non-GKI (fs/open.c)..."
         FS_OPEN="fs/open.c"
         if [ -f "$FS_OPEN" ]; then
-            # On vérifie si KernelSU n'est pas déjà injecté dans le fichier
-            if ! grep -q "ksu_handle_open" "$FS_OPEN"; then
-                # On cherche la fonction do_dentry_open et on y injecte le hook de KernelSU
-                sed -i '/do_dentry_open(/,/^{/ {
-                    /^{/ a\\n\t// Hook KernelSU pour noyau Non-GKI\n\t{ extern int ksu_handle_open(struct file *file); ksu_handle_open(f); }
-                }' "$FS_OPEN"
-                echo "[+] Hook KernelSU injecté manuellement dans fs/open.c"
-            fi
+            # Étape A : On nettoie d'abord les anciennes injections ratées au cas où le fichier serait mis en cache
+            sed -i '/ksu_handle_open/d' "$FS_OPEN"
+            
+            # Étape B : Injection chirurgicale juste après l'ouverture réussie du fichier dans do_dentry_open
+            # On cherche la ligne contenant 'return 0;' à l'intérieur de la fonction do_dentry_open
+            sed -i '/int do_dentry_open(/,/^[}]/ {
+                /return 0;/ i\
+\t{ extern int ksu_handle_open(struct file *file); ksu_handle_open(f); }
+            }' "$FS_OPEN"
+            
+            echo "[+] Hook KernelSU injecté avec succès au bon endroit dans fs/open.c"
         fi
 
         # 17. Injection globale des symboles VDSO32 manquants directement dans vdso.c
