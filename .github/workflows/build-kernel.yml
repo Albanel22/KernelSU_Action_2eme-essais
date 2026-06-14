@@ -378,13 +378,10 @@ jobs:
             sed -i '1i char vdso32_start[] = {};\nchar vdso32_end[] = {};' "arch/arm64/kernel/vdso.c"
         fi
 
-        # 18. Stub complet pour TOUS les Vendor Hooks Android manquants
+        # 18. Stub complet pour TOUS les Vendor Hooks Android manquants (Base CIP/Lineage)
         echo "Génération des stubs de secours pour l'intégralité des Vendor Hooks..."
         if [ -f "kernel/trace/trace.c" ]; then
-            # Nettoyage d'éventuels doublons
             sed -i '/_tracepoint_android_vh_/d' "kernel/trace/trace.c"
-            
-            # Injection de la liste exhaustive réclamée par LineageOS
             echo -e '\n/* Secours Tracepoints GKI pour compilation Non-GKI */' >> "kernel/trace/trace.c"
             echo 'struct tracepoint __tracepoint_android_vh_set_memory_ro;' >> "kernel/trace/trace.c"
             echo 'struct tracepoint __tracepoint_android_vh_set_memory_x;' >> "kernel/trace/trace.c"
@@ -399,10 +396,9 @@ jobs:
         # 19. Forcer l'inclusion de KernelSU dans le système de build principal
         echo "Liaison explicite de KernelSU dans le Makefile des drivers..."
         if [ -f "drivers/Makefile" ]; then
-            if ! grep -q "kernelsu" "drivers/Makefile"; then
-                echo "obj-y += kernelsu/" >> "drivers/Makefile"
-                echo "[+] KernelSU ajouté manuellement au drivers/Makefile"
-            fi
+            sed -i '/kernelsu/d' "drivers/Makefile" # On nettoie les doublons potentiels
+            echo "obj-y += kernelsu/" >> "drivers/Makefile"
+            echo "[+] KernelSU lié manuellement au drivers/Makefile"
         fi
         
     - name: Setup ccache
