@@ -217,8 +217,17 @@ jobs:
         
     - name: Setup Configuration for Kernel
       run: |
-        KERNEL_ROOT="$GITHUB_WORKSPACE/kernel_workspace/android-kernel"
-        cd "$KERNEL_ROOT"
+        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        
+        # [IMPORTANT] On force la désactivation de VDSO32 directement dans le fichier source defconfig
+        DEFCONFIG_FILE="arch/arm64/configs/vendor/sm8250-perf_defconfig"
+        if [ -f "$DEFCONFIG_FILE" ]; then
+            # On supprime les anciennes lignes CONFIG_VDSO32 si elles existent
+            sed -i '/CONFIG_VDSO32/d' "$DEFCONFIG_FILE"
+            # On écrit proprement la désactivation à la fin du fichier
+            echo "CONFIG_VDSO32=n" >> "$DEFCONFIG_FILE"
+            echo "[+] CONFIG_VDSO32=n a été injecté dans le defconfig."
+        fi
         
         # 1. Restauration propre des fichiers modifiés si nécessaire
         git checkout HEAD arch/arm64/Makefile arch/arm64/kernel/vdso32/Makefile include/linux/mmu_notifier.h 2>/dev/null || true
