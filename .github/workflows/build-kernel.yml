@@ -285,12 +285,10 @@ jobs:
             echo "CONFIG_CC_WERROR=n" >> "$TARGET_CONFIG"
         fi
         
-        # 9. Correctif pour l'erreur de type incomplet enum mmu_notifier_event
+        # 9. Correctif de type pour mmu_notifier.h
         echo "Application du correctif mmu_notifier.h..."
-        if [ -f "include/linux/mmu_notifier.h" ]; then
-            # On force l'inclusion des types MMU ou on s'assure que l'enum n'est pas traité comme incomplet
-            sed -i '345i #include <linux/mm_types.h>' include/linux/mmu_notifier.h
-        fi
+        sed -i '14i #include <linux/mm_types.h>' include/linux/mmu_notifier.h
+        
     - name: Setup ccache
       if: env.ENABLE_CCACHE == 'true'
       uses: hendrikmuhs/ccache-action@v1.2
