@@ -305,12 +305,14 @@ jobs:
         echo "CONFIG_DEBUG_INFO_DWARF4=y" >> "$TARGET_CONFIG"
         sed -i 's/CONFIG_DEBUG_INFO_DWARF5=y/CONFIG_DEBUG_INFO_DWARF4=y/g' "$TARGET_CONFIG"
 
-        # 11. Masquage de l'ancien objcopy par la version LLVM de Clang
-        echo "Forçage de la redirection objcopy vers llvm-objcopy..."
+        # 11. Masquage de l'ancien objcopy et strip par les versions LLVM de Clang
+        echo "Forçage de la redirection objcopy et strip vers LLVM..."
         CLANG_BIN_DIR=$(dirname $(find $GITHUB_WORKSPACE/kernel_workspace -name "clang" -type f | head -n 1))
         if [ -d "$CLANG_BIN_DIR" ]; then
             ln -sf "$CLANG_BIN_DIR/llvm-objcopy" "$CLANG_BIN_DIR/aarch64-linux-gnu-objcopy"
             ln -sf "$CLANG_BIN_DIR/llvm-objcopy" "$CLANG_BIN_DIR/objcopy"
+            ln -sf "$CLANG_BIN_DIR/llvm-strip" "$CLANG_BIN_DIR/aarch64-linux-gnu-strip"
+            ln -sf "$CLANG_BIN_DIR/llvm-strip" "$CLANG_BIN_DIR/strip"
             echo "$CLANG_BIN_DIR" >> $GITHUB_PATH
         fi
 
@@ -340,14 +342,14 @@ jobs:
           export KSU_EXPECTED_HASH=${{ env.KSU_EXPECTED_HASH }}
         fi
         
-        # Génération du .config avec liaison explicite à l'architecture cible
-        make O=out ARCH=${{ env.ARCH }} CC=clang CLANG_TRIPLE=aarch64-linux-gnu- ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }} ${{ env.KERNEL_CONFIG }}
+        # Génération du .config avec liaison explicite à l'architecture cible et STRIP correct
+        make O=out ARCH=${{ env.ARCH }} CC=clang CLANG_TRIPLE=aarch64-linux-gnu- STRIP=llvm-strip ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }} ${{ env.KERNEL_CONFIG }}
         
-        # Compilation
+        # Compilation avec injection globale de ccache (si activé) et llvm-strip
         if [ "${{ env.ENABLE_CCACHE }}" = "true" ]; then
-            make -j$(nproc --all) CC="ccache clang" CLANG_TRIPLE=aarch64-linux-gnu- O=out ARCH=${{ env.ARCH }} ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }}
+            make -j$(nproc --all) CC="ccache clang" CLANG_TRIPLE=aarch64-linux-gnu- STRIP=llvm-strip O=out ARCH=${{ env.ARCH }} ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }}
         else
-            make -j$(nproc --all) CC=clang CLANG_TRIPLE=aarch64-linux-gnu- O=out ARCH=${{ env.ARCH }} ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }}
+            make -j$(nproc --all) CC=clang CLANG_TRIPLE=aarch64-linux-gnu- STRIP=llvm-strip O=out ARCH=${{ env.ARCH }} ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }}
         fi
 
     - name: Make Anykernel3
