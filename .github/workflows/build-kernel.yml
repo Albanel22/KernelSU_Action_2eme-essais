@@ -251,13 +251,13 @@ jobs:
         # 7. Création et injection du fragment personnalisé (KernelSU + Kprobes)
         echo "Création et injection du fragment de configuration KernelSU..."
         cat << 'EOF' >> "$TARGET_CONFIG"
-CONFIG_MODULES=y
-CONFIG_KPROBES=y
-CONFIG_HAVE_KPROBES=y
-CONFIG_KPROBE_EVENTS=y
-CONFIG_OVERLAY_FS=y
-CONFIG_ASSIST_SU=y
-EOF
+        CONFIG_MODULES=y
+        CONFIG_KPROBES=y
+        CONFIG_HAVE_KPROBES=y
+        CONFIG_KPROBE_EVENTS=y
+        CONFIG_OVERLAY_FS=y
+        CONFIG_ASSIST_SU=y
+        EOF
         # 8. Suite des configurations conditionnelles du workflow
         if [ "${{ env.APPLY_KSU_PATCH }}" = "true" ]; then
             bash $GITHUB_WORKSPACE/patches/patches.sh
