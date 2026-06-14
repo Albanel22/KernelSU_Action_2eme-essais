@@ -231,18 +231,14 @@ jobs:
 
         # 4. Détermination, validation et création forcée du defconfig attendu par le Makefile
         CONFIG_NAME=$(basename "${{ env.KERNEL_CONFIG }}")
-        
-        # On cherche un fichier de configuration valide contenant "sm8250" ou "perf" chez le constructeur
         REAL_CONFIG_PATH=$(find arch/arm64/configs/ -type f -name "*sm8250*" | grep -i perf | head -n 1)
         
         if [ -z "$REAL_CONFIG_PATH" ]; then
             REAL_CONFIG_PATH=$(find arch/arm64/configs/ -type f -name "*sm8250*" | head -n 1)
         fi
-        
         if [ -z "$REAL_CONFIG_PATH" ]; then
             REAL_CONFIG_PATH=$(find arch/arm64/configs/ -type f -name "*perf_defconfig*" | head -n 1)
         fi
-
         if [ -z "$REAL_CONFIG_PATH" ]; then
             echo "ATTENTION : Aucune config SM8250 trouvée, utilisation du defconfig de secours"
             REAL_CONFIG_PATH="arch/arm64/configs/defconfig"
@@ -250,18 +246,10 @@ jobs:
 
         echo "Le script a déniché ce vrai fichier source : $REAL_CONFIG_PATH"
 
-        # Le coup de génie : on crée physiquement le dossier vendor et le fichier attendu par le Makefile
         mkdir -p arch/arm64/configs/vendor
         cp -f "$REAL_CONFIG_PATH" "arch/arm64/configs/vendor/$CONFIG_NAME"
         TARGET_CONFIG="arch/arm64/configs/vendor/$CONFIG_NAME"
         echo "Fichier de configuration cloné et prêt à l'emplacement requis : $TARGET_CONFIG"
-
-        # 5. Injection des configurations spécifiques à l'appareil Kiev de Motorola (si disponible)
-        MOTO_KIEV_CONFIG="arch/arm64/configs/vendor/ext_config/kiev-default.config"
-        if [ -f "$MOTO_KIEV_CONFIG" ]; then
-            echo "Fusion de la configuration spécifique Kiev ($MOTO_KIEV_CONFIG)..."
-            cat "$MOTO_KIEV_CONFIG" >> "$TARGET_CONFIG"
-        fi
 
         # 5. Injection des configurations spécifiques à l'appareil Kiev de Motorola
         MOTO_KIEV_CONFIG="arch/arm64/configs/vendor/ext_config/kiev-default.config"
@@ -285,11 +273,8 @@ jobs:
         echo "CONFIG_KPROBE_EVENTS=y" >> "$TARGET_CONFIG"
         echo "CONFIG_OVERLAY_FS=y" >> "$TARGET_CONFIG"
         echo "CONFIG_ASSIST_SU=y" >> "$TARGET_CONFIG"
-        echo "Désactivation des modules de débogage VM conflictuels..."
-        echo "CONFIG_DEBUG_VM=n" >> "$TARGET_CONFIG"
-        echo "CONFIG_DEBUG_VM_PGFLAGS=n" >> "$TARGET_CONFIG"
 
-        # 8. Configurations conditionnelles (Sans le patches.sh qui faisait crasher do_mounts)
+        # 8. Configurations conditionnelles
         if grep -q "CONFIG_KSU" "$TARGET_CONFIG"; then
             sed -i 's/# CONFIG_KSU is not set/CONFIG_KSU=y/g' "$TARGET_CONFIG"
             sed -i 's/CONFIG_KSU=n/CONFIG_KSU=y/g' "$TARGET_CONFIG"
@@ -316,9 +301,18 @@ jobs:
         sed -i '/#define _LINUX_MMU_NOTIFIER_H/a \\nenum mmu_notifier_event {\n\tMMU_NOTIFIER_UNREGISTER,\n\tMMU_NOTIFIER_RELEASE,\n};' include/linux/mmu_notifier.h
 
         # 10. Forcer l'utilisation de formats de débogage standard rétrocompatibles
-        echo "Optimisation des formats de débogage pour les utilitaires de tracking..."
+        echo "Optimisation des formats de débogage..."
         echo "CONFIG_DEBUG_INFO_DWARF4=y" >> "$TARGET_CONFIG"
         sed -i 's/CONFIG_DEBUG_INFO_DWARF5=y/CONFIG_DEBUG_INFO_DWARF4=y/g' "$TARGET_CONFIG"
+
+        # 11. Masquage de l'ancien objcopy par la version LLVM de Clang
+        echo "Forçage de la redirection objcopy vers llvm-objcopy..."
+        CLANG_BIN_DIR=$(dirname $(find $GITHUB_WORKSPACE/kernel_workspace -name "clang" -type f | head -n 1))
+        if [ -d "$CLANG_BIN_DIR" ]; then
+            ln -sf "$CLANG_BIN_DIR/llvm-objcopy" "$CLANG_BIN_DIR/aarch64-linux-gnu-objcopy"
+            ln -sf "$CLANG_BIN_DIR/llvm-objcopy" "$CLANG_BIN_DIR/objcopy"
+            echo "$CLANG_BIN_DIR" >> $GITHUB_PATH
+        fi
         
     - name: Setup ccache
       if: env.ENABLE_CCACHE == 'true'
