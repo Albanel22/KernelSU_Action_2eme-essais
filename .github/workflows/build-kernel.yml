@@ -258,7 +258,6 @@ CONFIG_KPROBE_EVENTS=y
 CONFIG_OVERLAY_FS=y
 CONFIG_ASSIST_SU=y
 EOF
-
         # 8. Suite des configurations conditionnelles du workflow
         if [ "${{ env.APPLY_KSU_PATCH }}" = "true" ]; then
             bash $GITHUB_WORKSPACE/patches/patches.sh
