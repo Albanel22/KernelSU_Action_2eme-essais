@@ -212,17 +212,23 @@ jobs:
         KERNEL_ROOT="$GITHUB_WORKSPACE/kernel_workspace/android-kernel"
         cd "$KERNEL_ROOT"
         
-        # 1. Restauration des fichiers potentiellement altérés lors des essais précédents
-        git checkout HEAD arch/arm64/Makefile arch/arm64/kernel/vdso32/ 2>/dev/null || true
-
-        # 2. Court-circuitage ciblé du VDSO32 dans le Makefile principal
+        # 1. Nettoyage en profondeur du Makefile principal (Désactivation définitive de vdso32)
         if [ -f arch/arm64/Makefile ]; then
-            echo "Désactivation forcée de VDSO32 dans le Makefile principal..."
-            # On supprime la dépendance vdso32 de la phase de préparation obligatoire
+            echo "Neutralisation chirurgicale du bloc VDSO32 dans le Makefile principal..."
+            
+            # On retire la dépendance de la phase de préparation globale
             sed -i 's/vdso_prepare\s*:\s*vdso32_prepare/vdso_prepare:/g' arch/arm64/Makefile
             sed -i 's/vdsowrapper\s*:\s*vdso32/vdsowrapper:/g' arch/arm64/Makefile
-            # Piège de secours : on retire le dossier vdso32 de la liste des dossiers à compiler
             sed -i 's/core-y\s*+= arch\/arm64\/kernel\/vdso32\///g' arch/arm64/Makefile
+            
+            # Technique absolue : On réécrit la cible vdso32_prepare pour qu'elle soit vide
+            echo -e "\nvdso32_prepare:\n\t@echo 'VDSO32 ignoré pour ce build'\n" >> arch/arm64/Makefile
+        fi
+
+        # 2. Neutralisation interne du sous-Makefile pour éviter tout appel indirect
+        if [ -f arch/arm64/kernel/vdso32/Makefile ]; then
+            echo "Vidage complet des cibles de compilation du sous-Makefile VDSO32..."
+            echo -e "obj-y :=\ntargets :=\nclean-files :=\nall:\n\t@echo 'Bypass'\ninstall:\n\t@echo 'Bypass'" > arch/arm64/kernel/vdso32/Makefile
         fi
 
         # 3. Détermination et validation du defconfig de base
@@ -243,7 +249,10 @@ jobs:
             cat "$MOTO_KIEV_CONFIG" >> "$TARGET_CONFIG"
         fi
 
-        # 5. Maintien des drapeaux de désactivation dans la configuration pour la cohérence
+        # 5. Désactivation logicielle au niveau du .config (Double sécurité)
+        echo "Désactivation de la compatibilité 32 bits dans la configuration..."
+        sed -i 's/CONFIG_COMPAT=y/CONFIG_COMPAT=n/g' "$TARGET_CONFIG"
+        sed -i 's/CONFIG_VDSO32=y/CONFIG_VDSO32=n/g' "$TARGET_CONFIG"
         echo "CONFIG_COMPAT=n" >> "$TARGET_CONFIG"
         echo "CONFIG_VDSO32=n" >> "$TARGET_CONFIG"
 
