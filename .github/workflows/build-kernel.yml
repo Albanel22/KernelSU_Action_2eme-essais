@@ -314,6 +314,12 @@ jobs:
         echo "Application du correctif mmu_notifier.h..."
         sed -i '/^enum mmu_notifier_event {/,/^};/d' include/linux/mmu_notifier.h
         sed -i '/#define _LINUX_MMU_NOTIFIER_H/a \\nenum mmu_notifier_event {\n\tMMU_NOTIFIER_UNREGISTER,\n\tMMU_NOTIFIER_RELEASE,\n};' include/linux/mmu_notifier.h
+
+        # 10. Forcer l'utilisation de formats de débogage standard rétrocompatibles
+        echo "Optimisation des formats de débogage pour les utilitaires de tracking..."
+        echo "CONFIG_DEBUG_INFO_DWARF4=y" >> "$TARGET_CONFIG"
+        sed -i 's/CONFIG_DEBUG_INFO_DWARF5=y/CONFIG_DEBUG_INFO_DWARF4=y/g' "$TARGET_CONFIG"
+        
     - name: Setup ccache
       if: env.ENABLE_CCACHE == 'true'
       uses: hendrikmuhs/ccache-action@v1.2
