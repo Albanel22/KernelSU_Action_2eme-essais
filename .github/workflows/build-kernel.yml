@@ -314,13 +314,13 @@ jobs:
             echo "$CLANG_BIN_DIR" >> $GITHUB_PATH
         fi
 
-        # 12. Neutralisation des pointeurs VDSO32 manquants dans signal32.c
-        echo "Application du correctif pour signal32.c..."
+        # 12. Neutralisation des pointeurs VDSO32 manquants dans signal32.c (Regex souple)
+        echo "Application du correctif robuste pour signal32.c..."
         if [ -f "arch/arm64/kernel/signal32.c" ]; then
-            sed -i 's/VDSO_SYMBOL(vdso_base,\s*compat_rt_sigreturn_thumb)/NULL/g' arch/arm64/kernel/signal32.c
-            sed -i 's/VDSO_SYMBOL(vdso_base,\s*compat_rt_sigreturn_arm)/NULL/g' arch/arm64/kernel/signal32.c
-            sed -i 's/VDSO_SYMBOL(vdso_base,\s*compat_sigreturn_thumb)/NULL/g' arch/arm64/kernel/signal32.c
-            sed -i 's/VDSO_SYMBOL(vdso_base,\s*compat_sigreturn_arm)/NULL/g' arch/arm64/kernel/signal32.c
+            sed -i 's/VDSO_SYMBOL(.*compat_rt_sigreturn_thumb)/NULL/g' arch/arm64/kernel/signal32.c
+            sed -i 's/VDSO_SYMBOL(.*compat_rt_sigreturn_arm)/NULL/g' arch/arm64/kernel/signal32.c
+            sed -i 's/VDSO_SYMBOL(.*compat_sigreturn_thumb)/NULL/g' arch/arm64/kernel/signal32.c
+            sed -i 's/VDSO_SYMBOL(.*compat_sigreturn_arm)/NULL/g' arch/arm64/kernel/signal32.c
         fi
         
     - name: Setup ccache
