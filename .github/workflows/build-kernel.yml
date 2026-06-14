@@ -287,9 +287,9 @@ jobs:
         # 9. Correctif définitif pour l'erreur de type incomplet enum mmu_notifier_event
         echo "Application du correctif structurel pour mmu_notifier.h..."
         python3 -c '
-filename = "include/linux/mmu_notifier.h"
-with open(filename, "r") as f:
-    content = f.read()
+        filename = "include/linux/mmu_notifier.h"
+        with open(filename, "r") as f:
+        content = f.read()
 if "enum mmu_notifier_event {" in content and "/* PATCH_MMU */" not in content:
     start_idx = content.find("enum mmu_notifier_event {")
     end_idx = content.find("};", start_idx) + 2
