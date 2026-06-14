@@ -229,24 +229,39 @@ jobs:
         sed -i 's/vdso_prepare\s*:\s*vdso32_prepare/vdso_prepare:/g' arch/arm64/Makefile
         sed -i 's/vdso32_prepare//g' arch/arm64/Makefile
 
-        # 4. Détermination et validation du defconfig de base
+        # 4. Détermination, validation et création forcée du defconfig attendu par le Makefile
         CONFIG_NAME=$(basename "${{ env.KERNEL_CONFIG }}")
-        # On cherche d'abord dans tout le dossier configs pour trouver le vrai fichier
-        REAL_CONFIG_PATH=$(find arch/arm64/configs/ -type f -name "$CONFIG_NAME" | head -n 1)
         
-        # Si non trouvé, on cherche une correspondance partielle
+        # On cherche un fichier de configuration valide contenant "sm8250" ou "perf" chez le constructeur
+        REAL_CONFIG_PATH=$(find arch/arm64/configs/ -type f -name "*sm8250*" | grep -i perf | head -n 1)
+        
         if [ -z "$REAL_CONFIG_PATH" ]; then
-            REAL_CONFIG_PATH=$(find arch/arm64/configs/ -type f -name "*sm8250*" | grep -i perf | head -n 1)
+            REAL_CONFIG_PATH=$(find arch/arm64/configs/ -type f -name "*sm8250*" | head -n 1)
+        fi
+        
+        if [ -z "$REAL_CONFIG_PATH" ]; then
+            REAL_CONFIG_PATH=$(find arch/arm64/configs/ -type f -name "*perf_defconfig*" | head -n 1)
         fi
 
-        # Si toujours non trouvé, on se rabat sur le defconfig générique mais sécurisé
         if [ -z "$REAL_CONFIG_PATH" ]; then
-            echo "ATTENTION : Impossible de trouver $CONFIG_NAME, repli sur le defconfig générique"
+            echo "ATTENTION : Aucune config SM8250 trouvée, utilisation du defconfig de secours"
             REAL_CONFIG_PATH="arch/arm64/configs/defconfig"
         fi
-        
-        TARGET_CONFIG="$REAL_CONFIG_PATH"
-        echo "Fichier de configuration de base sélectionné : $TARGET_CONFIG"
+
+        echo "Le script a déniché ce vrai fichier source : $REAL_CONFIG_PATH"
+
+        # Le coup de génie : on crée physiquement le dossier vendor et le fichier attendu par le Makefile
+        mkdir -p arch/arm64/configs/vendor
+        cp -f "$REAL_CONFIG_PATH" "arch/arm64/configs/vendor/$CONFIG_NAME"
+        TARGET_CONFIG="arch/arm64/configs/vendor/$CONFIG_NAME"
+        echo "Fichier de configuration cloné et prêt à l'emplacement requis : $TARGET_CONFIG"
+
+        # 5. Injection des configurations spécifiques à l'appareil Kiev de Motorola (si disponible)
+        MOTO_KIEV_CONFIG="arch/arm64/configs/vendor/ext_config/kiev-default.config"
+        if [ -f "$MOTO_KIEV_CONFIG" ]; then
+            echo "Fusion de la configuration spécifique Kiev ($MOTO_KIEV_CONFIG)..."
+            cat "$MOTO_KIEV_CONFIG" >> "$TARGET_CONFIG"
+        fi
 
         # 5. Injection des configurations spécifiques à l'appareil Kiev de Motorola
         MOTO_KIEV_CONFIG="arch/arm64/configs/vendor/ext_config/kiev-default.config"
