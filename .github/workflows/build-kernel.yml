@@ -199,18 +199,22 @@ jobs:
             echo "HAVE_SOURCE_BOOT_IMAGE=true" >> $GITHUB_ENV
         fi
 
-    - name: Setup KernelSU
+    - name: Setup KernelSU Version
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        # Ta commande actuelle qui télécharge ou initialise KSU (ex: curl ou git clone)
-        # ...
         
-        # AJOUTE CES LIGNES ICI POUR VERROUILLER LA VERSION COMPATIBLE :
-        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel/KernelSU
+        # Vérification si le dossier KernelSU existe, sinon on le clone proprement
+        if [ ! -d "KernelSU" ]; then
+            echo "[!] Dossier KernelSU introuvable, clonage manuel en cours..."
+            git clone https://github.com/tiann/KernelSU.git KernelSU
+        fi
+        
+        # Application de la version stable v0.9.5
+        cd KernelSU
         git fetch --tags
         git checkout v0.9.5
-        echo "[+] Version de KernelSU verrouillée sur la v0.9.5 pour compatibilité noyau 4.19"
-
+        echo "[+] Version de KernelSU verrouillée avec succès sur la v0.9.5 !"
+        
     - name: Setup Configuration for Kernel
       run: |
         KERNEL_ROOT="$GITHUB_WORKSPACE/kernel_workspace/android-kernel"
