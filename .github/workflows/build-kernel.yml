@@ -212,26 +212,20 @@ jobs:
         KERNEL_ROOT="$GITHUB_WORKSPACE/kernel_workspace/android-kernel"
         cd "$KERNEL_ROOT"
         
-        # 1. Nettoyage en profondeur du Makefile principal (Désactivation définitive de vdso32)
-        if [ -f arch/arm64/Makefile ]; then
-            echo "Neutralisation chirurgicale du bloc VDSO32 dans le Makefile principal..."
-            
-            # On retire la dépendance de la phase de préparation globale
-            sed -i 's/vdso_prepare\s*:\s*vdso32_prepare/vdso_prepare:/g' arch/arm64/Makefile
-            sed -i 's/vdsowrapper\s*:\s*vdso32/vdsowrapper:/g' arch/arm64/Makefile
-            sed -i 's/core-y\s*+= arch\/arm64\/kernel\/vdso32\///g' arch/arm64/Makefile
-            
-            # Technique absolue : On réécrit la cible vdso32_prepare pour qu'elle soit vide
-            echo -e "\nvdso32_prepare:\n\t@echo 'VDSO32 ignoré pour ce build'\n" >> arch/arm64/Makefile
-        fi
+        # 1. Restauration propre des fichiers Makefile modifiés précédemment
+        git checkout HEAD arch/arm64/Makefile arch/arm64/kernel/vdso32/Makefile 2>/dev/null || true
 
-        # 2. Neutralisation interne du sous-Makefile pour éviter tout appel indirect
-        if [ -f arch/arm64/kernel/vdso32/Makefile ]; then
-            echo "Vidage complet des cibles de compilation du sous-Makefile VDSO32..."
-            echo -e "obj-y :=\ntargets :=\nclean-files :=\nall:\n\t@echo 'Bypass'\ninstall:\n\t@echo 'Bypass'" > arch/arm64/kernel/vdso32/Makefile
-        fi
+        # 2. Création préventive du fichier de dépendance manquant (L'astuce du fantôme)
+        # On s'assure que le dossier de sortie existe et on crée un en-tête vdso32 vide
+        mkdir -p out/include/generated
+        touch out/include/generated/vdso32-offsets.h
+        echo "/* Généré automatiquement pour contourner le build VDSO32 */" > out/include/generated/vdso32-offsets.h
 
-        # 3. Détermination et validation du defconfig de base
+        # 3. Empêcher la réécriture ou la suppression de ce fichier par le build
+        # On dit à Git et au système de considérer la cible vdso32_prepare comme réglée
+        sed -i 's/vdso_prepare\s*:\s*vdso32_prepare/vdso_prepare:/g' arch/arm64/Makefile
+
+        # 4. Détermination et validation du defconfig de base
         CONFIG_NAME=$(basename "${{ env.KERNEL_CONFIG }}")
         REAL_CONFIG_PATH=$(find arch/arm64/configs/ -type f -name "$CONFIG_NAME" | head -n 1)
         
@@ -242,21 +236,21 @@ jobs:
         TARGET_CONFIG="$REAL_CONFIG_PATH"
         echo "Fichier de configuration de base sélectionné : $TARGET_CONFIG"
 
-        # 4. Injection des configurations spécifiques à l'appareil Kiev de Motorola
+        # 5. Injection des configurations spécifiques à l'appareil Kiev de Motorola
         MOTO_KIEV_CONFIG="arch/arm64/configs/vendor/ext_config/kiev-default.config"
         if [ -f "$MOTO_KIEV_CONFIG" ]; then
             echo "Fusion de la configuration spécifique Kiev ($MOTO_KIEV_CONFIG)..."
             cat "$MOTO_KIEV_CONFIG" >> "$TARGET_CONFIG"
         fi
 
-        # 5. Désactivation logicielle au niveau du .config (Double sécurité)
+        # 6. Désactivation logicielle stricte au niveau du .config
         echo "Désactivation de la compatibilité 32 bits dans la configuration..."
         sed -i 's/CONFIG_COMPAT=y/CONFIG_COMPAT=n/g' "$TARGET_CONFIG"
         sed -i 's/CONFIG_VDSO32=y/CONFIG_VDSO32=n/g' "$TARGET_CONFIG"
         echo "CONFIG_COMPAT=n" >> "$TARGET_CONFIG"
         echo "CONFIG_VDSO32=n" >> "$TARGET_CONFIG"
 
-        # 6. Création et injection du fragment personnalisé (KernelSU + Kprobes)
+        # 7. Création et injection du fragment personnalisé (KernelSU + Kprobes)
         echo "Création et injection du fragment de configuration KernelSU..."
         cat <<EOF >> "$TARGET_CONFIG"
         CONFIG_MODULES=y
@@ -267,7 +261,7 @@ jobs:
         CONFIG_ASSIST_SU=y
         EOF
 
-        # 7. Suite des configurations conditionnelles du workflow
+        # 8. Suite des configurations conditionnelles du workflow
         if [ "${{ env.APPLY_KSU_PATCH }}" = "true" ]; then
             bash $GITHUB_WORKSPACE/patches/patches.sh
             if grep -q "CONFIG_KSU" "$TARGET_CONFIG"; then
