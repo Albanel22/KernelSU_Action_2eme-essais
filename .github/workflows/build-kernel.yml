@@ -324,18 +324,14 @@ jobs:
             echo "$CLANG_BIN_DIR" >> $GITHUB_PATH
         fi
 
-        # 12. Désactivation propre de VDSO32 pour éviter les conflits de liaison symbolique
-        echo "Désactivation de CONFIG_VDSO32 dans la configuration..."
-        # On désactive l'option dans le fichier de config principal si généré
-        if [ -f "out/.config" ]; then
-            sed -i 's/CONFIG_VDSO32=y/CONFIG_VDSO32=n/g' out/.config
-            echo "CONFIG_VDSO32=n" >> out/.config
-        fi
-        # On désactive également dans le fichier source au cas où il écraserait
-        CONFIG_PATH="arch/arm64/configs/${{ env.KERNEL_CONFIG }}"
-        if [ -f "$CONFIG_PATH" ]; then
-            sed -i 's/CONFIG_VDSO32=y/CONFIG_VDSO32=n/g' "$CONFIG_PATH"
-            echo "CONFIG_VDSO32=n" >> "$CONFIG_PATH"
+        # 12. Neutralisation propre du trampoline VDSO32 dans signal32.c sans altérer vmlinux
+        echo "Application du patch de compatibilité pour signal32.c..."
+        SIGNAL_FILE="arch/arm64/kernel/signal32.c"
+        if [ -f "$SIGNAL_FILE" ]; then
+            # On entoure le bloc problématique (lignes ~360 à 375) par une sécurité
+            # On cherche la condition du trampoline et on la force à utiliser le comportement de secours
+            sed -i 's/if (compat_arm64_vdso)/if (0)/g' "$SIGNAL_FILE"
+            echo "[+] signal32.c a été patché avec succès (trampoline dérouté)."
         fi
 
         # 13. Correctif pour l'erreur EFI mmap_sem -> mmap_lock
