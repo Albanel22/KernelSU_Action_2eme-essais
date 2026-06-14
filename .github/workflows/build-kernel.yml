@@ -370,19 +370,15 @@ jobs:
         echo "Application du patch de hooking précis Non-GKI (fs/open.c)..."
         FS_OPEN="fs/open.c"
         if [ -f "$FS_OPEN" ]; then
-            # Étape A : On nettoie d'abord les anciennes injections ratées au cas où le fichier serait mis en cache
+            # Nettoyage des essais précédents
             sed -i '/ksu_handle_open/d' "$FS_OPEN"
             
-            # Étape B : Injection chirurgicale juste après l'ouverture réussie du fichier dans do_dentry_open
-            # On cherche la ligne contenant 'return 0;' à l'intérieur de la fonction do_dentry_open
-            sed -i '/int do_dentry_open(/,/^[}]/ {
-                /return 0;/ i\
-\t{ extern int ksu_handle_open(struct file *file); ksu_handle_open(f); }
-            }' "$FS_OPEN"
+            # Injection sécurisée sur une seule ligne (évite les erreurs de syntaxe YAML)
+            sed -i '/int do_dentry_open(/,/^[}]/s/return 0;/{ extern int ksu_handle_open(struct file *file); ksu_handle_open(f); } return 0;/g' "$FS_OPEN"
             
-            echo "[+] Hook KernelSU injecté avec succès au bon endroit dans fs/open.c"
+            echo "[+] Hook KernelSU injecté avec succès dans fs/open.c"
         fi
-
+        
         # 17. Injection globale des symboles VDSO32 manquants directement dans vdso.c
         echo "Application du patch de liaison finale pour vdso.c..."
         VDSO_MAIN="arch/arm64/kernel/vdso.c"
