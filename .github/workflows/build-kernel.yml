@@ -67,7 +67,7 @@ jobs:
         done
 
     - name: Remove unused packages
-      if: env.REMOVE_UNUSED_PACKAGES == 'true'
+      if: env.REMOVE_UNUSED_PACKAGES ==false
       uses: jlumbroso/free-disk-space@main
       with:
         tool-cache: true
