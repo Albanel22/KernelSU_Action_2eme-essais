@@ -365,6 +365,25 @@ jobs:
             sed -i '/bengal/d' "$DTS_MAKEFILE"
             echo "[+] Références à bengal retirées du Makefile des DTS."
         fi
+        
+        # 16. Forcer la neutralisation du hook BPF manquant dans KernelSU
+        echo "Désactivation du hook BPF incompatible dans KernelSU..."
+        KSU_BPF_HOOK="drivers/kernelsu/core/bpf_filter.c"
+        if [ -f "$KSU_BPF_HOOK" ]; then
+            # On vide le fichier ou on désactive son initialisation pour éviter l'appel au tracepoint manquant
+            echo "int ksu_init_bpf_filter(void) { return 0; }" > "$KSU_BPF_HOOK"
+            echo "void ksu_exit_bpf_filter(void) {}" >> "$KSU_BPF_HOOK"
+            echo "[+] Hook BPF KernelSU neutralisé avec succès."
+        fi
+
+        # 17. Injection globale des symboles VDSO32 manquants directement dans vdso.c
+        echo "Application du patch de liaison finale pour vdso.c..."
+        VDSO_MAIN="arch/arm64/kernel/vdso.c"
+        if [ -f "$VDSO_MAIN" ]; then
+            # On injecte les définitions physiques manquantes pour rassurer l'éditeur de liens (ld.lld)
+            sed -i '1i char vdso32_start[] = {};\nchar vdso32_end[] = {};' "$VDSO_MAIN"
+            echo "[+] Symboles vdso32 injectés directement dans le code source de vdso.c."
+        fi
 
     - name: Setup ccache
       if: env.ENABLE_CCACHE == 'true'
