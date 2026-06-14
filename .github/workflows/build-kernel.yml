@@ -331,6 +331,23 @@ jobs:
             echo "[+] efi.c a été patché avec succès pour utiliser mmap_lock."
         fi
 
+        # 14. Correctif de compatibilité KernelSU pour les noyaux plus anciens (MODULE_IMPORT_NS)
+        echo "Application du correctif pour KernelSU MODULE_IMPORT_NS..."
+        KSU_INIT_FILE="drivers/kernelsu/core/init.c"
+        if [ -f "$KSU_INIT_FILE" ]; then
+            # On injecte une sécurité au début du fichier : si MODULE_IMPORT_NS n'existe pas, on la définit comme vide
+            sed -i '1i #ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif' "$KSU_INIT_FILE"
+            echo "[+] Patch de compatibilité appliqué sur init.c avec succès."
+        fi
+
+        # 15. Nettoyage du Makefile des DTS pour éviter le Segmentation Fault sur Bengal (non requis pour SM8250)
+        echo "Nettoyage du Makefile des DTS pour contourner le Segfault Bengal..."
+        DTS_MAKEFILE="arch/arm64/boot/dts/vendor/qcom/Makefile"
+        if [ -f "$DTS_MAKEFILE" ]; then
+            sed -i '/bengal/d' "$DTS_MAKEFILE"
+            echo "[+] Références à bengal retirées du Makefile des DTS."
+        fi
+
     - name: Setup ccache
       if: env.ENABLE_CCACHE == 'true'
       uses: hendrikmuhs/ccache-action@v1.2
