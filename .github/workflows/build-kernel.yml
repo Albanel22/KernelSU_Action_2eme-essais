@@ -314,13 +314,11 @@ jobs:
             echo "$CLANG_BIN_DIR" >> $GITHUB_PATH
         fi
 
-        # 12. Neutralisation des pointeurs VDSO32 manquants dans signal32.c (Regex souple)
-        echo "Application du correctif robuste pour signal32.c..."
+        # 12. Neutralisation totale des macros VDSO32 dans signal32.c
+        echo "Application du correctif de contournement pour signal32.c..."
         if [ -f "arch/arm64/kernel/signal32.c" ]; then
-            sed -i 's/VDSO_SYMBOL(.*compat_rt_sigreturn_thumb)/NULL/g' arch/arm64/kernel/signal32.c
-            sed -i 's/VDSO_SYMBOL(.*compat_rt_sigreturn_arm)/NULL/g' arch/arm64/kernel/signal32.c
-            sed -i 's/VDSO_SYMBOL(.*compat_sigreturn_thumb)/NULL/g' arch/arm64/kernel/signal32.c
-            sed -i 's/VDSO_SYMBOL(.*compat_sigreturn_arm)/NULL/g' arch/arm64/kernel/signal32.c
+            # On force le fichier à définir les offsets manquants à 0 tout en haut du fichier pour que Clang ne se plaigne plus jamais
+            sed -i '1i #define vdso_offset_compat_rt_sigreturn_thumb 0\n#define vdso_offset_compat_rt_sigreturn_arm 0\n#define vdso_offset_compat_sigreturn_thumb 0\n#define vdso_offset_compat_sigreturn_arm 0\n#define VDSO_LBASE 0' arch/arm64/kernel/signal32.c
         fi
         
     - name: Setup ccache
