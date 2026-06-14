@@ -323,6 +323,14 @@ jobs:
             echo "[+] signal32.c a été patché avec succès."
         fi
 
+        # 13. Correctif pour l'erreur EFI mmap_sem -> mmap_lock
+        echo "Application du correctif pour drivers/firmware/efi/efi.c..."
+        EFI_FILE="drivers/firmware/efi/efi.c"
+        if [ -f "$EFI_FILE" ]; then
+            sed -i 's/\.mmap_sem\s*=\s*__RWSEM_INITIALIZER(efi_mm\.mmap_sem)/\.mmap_lock = __RWSEM_INITIALIZER(efi_mm\.mmap_lock)/g' "$EFI_FILE"
+            echo "[+] efi.c a été patché avec succès pour utiliser mmap_lock."
+        fi
+
     - name: Setup ccache
       if: env.ENABLE_CCACHE == 'true'
       uses: hendrikmuhs/ccache-action@v1.2
