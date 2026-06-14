@@ -216,13 +216,11 @@ jobs:
         git checkout HEAD arch/arm64/Makefile arch/arm64/kernel/vdso32/Makefile 2>/dev/null || true
 
         # 2. Création préventive du fichier de dépendance manquant (L'astuce du fantôme)
-        # On s'assure que le dossier de sortie existe et on crée un en-tête vdso32 vide
         mkdir -p out/include/generated
         touch out/include/generated/vdso32-offsets.h
         echo "/* Généré automatiquement pour contourner le build VDSO32 */" > out/include/generated/vdso32-offsets.h
 
         # 3. Empêcher la réécriture ou la suppression de ce fichier par le build
-        # On dit à Git et au système de considérer la cible vdso32_prepare comme réglée
         sed -i 's/vdso_prepare\s*:\s*vdso32_prepare/vdso_prepare:/g' arch/arm64/Makefile
 
         # 4. Détermination et validation du defconfig de base
@@ -252,14 +250,14 @@ jobs:
 
         # 7. Création et injection du fragment personnalisé (KernelSU + Kprobes)
         echo "Création et injection du fragment de configuration KernelSU..."
-        cat <<EOF >> "$TARGET_CONFIG"
-        CONFIG_MODULES=y
-        CONFIG_KPROBES=y
-        CONFIG_HAVE_KPROBES=y
-        CONFIG_KPROBE_EVENTS=y
-        CONFIG_OVERLAY_FS=y
-        CONFIG_ASSIST_SU=y
-        EOF
+        cat << 'EOF' >> "$TARGET_CONFIG"
+CONFIG_MODULES=y
+CONFIG_KPROBES=y
+CONFIG_HAVE_KPROBES=y
+CONFIG_KPROBE_EVENTS=y
+CONFIG_OVERLAY_FS=y
+CONFIG_ASSIST_SU=y
+EOF
 
         # 8. Suite des configurations conditionnelles du workflow
         if [ "${{ env.APPLY_KSU_PATCH }}" = "true" ]; then
@@ -283,6 +281,7 @@ jobs:
         if [ "${{ env.DISABLE_CC_WERROR }}" = "true" ]; then
             echo "CONFIG_CC_WERROR=n" >> "$TARGET_CONFIG"
         fi
+
     - name: Setup ccache
       if: env.ENABLE_CCACHE == 'true'
       uses: hendrikmuhs/ccache-action@v1.2
