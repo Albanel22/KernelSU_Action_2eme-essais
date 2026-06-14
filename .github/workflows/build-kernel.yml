@@ -333,14 +333,13 @@ jobs:
             echo "$CLANG_BIN_DIR" >> $GITHUB_PATH
         fi
 
-        # 12. Neutralisation propre du trampoline VDSO32 dans signal32.c sans altérer vmlinux
-        echo "Application du patch de compatibilité pour signal32.c..."
+        # 12. Injection des macros de secours VDSO32 au début de signal32.c
+        echo "Application du patch de compatibilité absolue pour signal32.c..."
         SIGNAL_FILE="arch/arm64/kernel/signal32.c"
         if [ -f "$SIGNAL_FILE" ]; then
-            # On entoure le bloc problématique (lignes ~360 à 375) par une sécurité
-            # On cherche la condition du trampoline et on la force à utiliser le comportement de secours
-            sed -i 's/if (compat_arm64_vdso)/if (0)/g' "$SIGNAL_FILE"
-            echo "[+] signal32.c a été patché avec succès (trampoline dérouté)."
+            # On injecte directement les définitions manquantes à la ligne 1 du fichier
+            sed -i '1i #define vdso_offset_compat_rt_sigreturn_thumb 0\n#define vdso_offset_compat_rt_sigreturn_arm 0\n#define vdso_offset_compat_sigreturn_thumb 0\n#define vdso_offset_compat_sigreturn_arm 0\n#define VDSO_LBASE 0' "$SIGNAL_FILE"
+            echo "[+] Variables factices VDSO32 injectées avec succès dans signal32.c."
         fi
 
         # 13. Correctif pour l'erreur EFI mmap_sem -> mmap_lock
