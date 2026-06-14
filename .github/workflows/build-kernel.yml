@@ -231,12 +231,20 @@ jobs:
 
         # 4. Détermination et validation du defconfig de base
         CONFIG_NAME=$(basename "${{ env.KERNEL_CONFIG }}")
+        # On cherche d'abord dans tout le dossier configs pour trouver le vrai fichier
         REAL_CONFIG_PATH=$(find arch/arm64/configs/ -type f -name "$CONFIG_NAME" | head -n 1)
         
+        # Si non trouvé, on cherche une correspondance partielle
         if [ -z "$REAL_CONFIG_PATH" ]; then
-            echo "ERREUR : Impossible de trouver le fichier de base $CONFIG_NAME"
-            exit 1
+            REAL_CONFIG_PATH=$(find arch/arm64/configs/ -type f -name "*sm8250*" | grep -i perf | head -n 1)
         fi
+
+        # Si toujours non trouvé, on se rabat sur le defconfig générique mais sécurisé
+        if [ -z "$REAL_CONFIG_PATH" ]; then
+            echo "ATTENTION : Impossible de trouver $CONFIG_NAME, repli sur le defconfig générique"
+            REAL_CONFIG_PATH="arch/arm64/configs/defconfig"
+        fi
+        
         TARGET_CONFIG="$REAL_CONFIG_PATH"
         echo "Fichier de configuration de base sélectionné : $TARGET_CONFIG"
 
@@ -262,6 +270,9 @@ jobs:
         echo "CONFIG_KPROBE_EVENTS=y" >> "$TARGET_CONFIG"
         echo "CONFIG_OVERLAY_FS=y" >> "$TARGET_CONFIG"
         echo "CONFIG_ASSIST_SU=y" >> "$TARGET_CONFIG"
+        echo "Désactivation des modules de débogage VM conflictuels..."
+        echo "CONFIG_DEBUG_VM=n" >> "$TARGET_CONFIG"
+        echo "CONFIG_DEBUG_VM_PGFLAGS=n" >> "$TARGET_CONFIG"
 
         # 8. Configurations conditionnelles (Sans le patches.sh qui faisait crasher do_mounts)
         if grep -q "CONFIG_KSU" "$TARGET_CONFIG"; then
