@@ -241,11 +241,11 @@ jobs:
             cat "$MOTO_KIEV_CONFIG" >> "$TARGET_CONFIG"
         fi
 
-        # 6. Désactivation logicielle stricte au niveau du .config
-        echo "Désactivation de la compatibilité 32 bits dans la configuration..."
-        sed -i 's/CONFIG_COMPAT=y/CONFIG_COMPAT=n/g' "$TARGET_CONFIG"
+        # 6. Maintien de la compatibilité 32 bits (requis pour les types de pointeurs comme compat_uptr_t)
+        echo "Configuration de la compatibilité structurelle..."
+        sed -i 's/CONFIG_COMPAT=n/CONFIG_COMPAT=y/g' "$TARGET_CONFIG"
         sed -i 's/CONFIG_VDSO32=y/CONFIG_VDSO32=n/g' "$TARGET_CONFIG"
-        echo "CONFIG_COMPAT=n" >> "$TARGET_CONFIG"
+        echo "CONFIG_COMPAT=y" >> "$TARGET_CONFIG"
         echo "CONFIG_VDSO32=n" >> "$TARGET_CONFIG"
 
         # 7. Création et injection du fragment personnalisé (KernelSU + Kprobes)
