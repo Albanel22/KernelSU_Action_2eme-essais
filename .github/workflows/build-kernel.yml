@@ -284,23 +284,10 @@ jobs:
             echo "CONFIG_CC_WERROR=n" >> "$TARGET_CONFIG"
         fi
 
-        # 9. Correctif définitif pour l'erreur de type incomplet enum mmu_notifier_event
-        echo "Application du correctif structurel pour mmu_notifier.h..."
-        python3 -c "
-        filename = \"include/linux/mmu_notifier.h\"
-with open(filename, \"r\") as f:
-    content = f.read()
-if \"enum mmu_notifier_event {\" in content and \"/* PATCH_MMU */\" not in content:
-    start_idx = content.find(\"enum mmu_notifier_event {\")
-    end_idx = content.find(\"};\", start_idx) + 2
-    enum_block = content[start_idx:end_idx]
-    guard = \"#define _LINUX_MMU_NOTIFIER_H\"
-    if guard in content:
-    patched = content.replace(guard, f\"{guard}\n\n/* PATCH_MMU */\n{enum_block}\n\")
-        with open(filename, \"w\") as f:
-            f.write(patched)
-        print(\"[+] Fichier mmu_notifier.h patché avec succès !\")
-        
+        # 9. Correctif structurel pour mmu_notifier.h via injection directe
+        echo "Application du correctif mmu_notifier.h..."
+        sed -i '/^enum mmu_notifier_event {/,/^};/d' include/linux/mmu_notifier.h
+        sed -i '/#define _LINUX_MMU_NOTIFIER_H/a \\nenum mmu_notifier_event {\n\tMMU_NOTIFIER_UNREGISTER,\n\tMMU_NOTIFIER_RELEASE,\n};' include/linux/mmu_notifier.h
     - name: Setup ccache
       if: env.ENABLE_CCACHE == 'true'
       uses: hendrikmuhs/ccache-action@v1.2
