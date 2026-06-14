@@ -213,7 +213,7 @@ jobs:
         cd "$KERNEL_ROOT"
         
         # 1. Restauration propre des fichiers modifiés si nécessaire
-        git checkout HEAD arch/arm64/Makefile arch/arm64/kernel/vdso32/Makefile 2>/dev/null || true
+        git checkout HEAD arch/arm64/Makefile arch/arm64/kernel/vdso32/Makefile include/linux/mmu_notifier.h 2>/dev/null || true
 
         # 2. L'astuce du fantôme : Création préventive de l'en-tête généré pour éviter les erreurs de dépendance
         mkdir -p out/include/generated
@@ -221,7 +221,6 @@ jobs:
         echo "/* Généré automatiquement */" > out/include/generated/vdso32-offsets.h
 
         # 3. Court-circuit radical du VDSO32 (Élimine l'erreur sigreturn.S)
-        # On vide complètement le Makefile du VDSO32 pour que Clang ne compile aucun objet 32 bits défaillant
         echo "obj-y :=" > arch/arm64/kernel/vdso32/Makefile
         echo "targets :=" >> arch/arm64/kernel/vdso32/Makefile
         echo "clean-files :=" >> arch/arm64/kernel/vdso32/Makefile
@@ -248,11 +247,11 @@ jobs:
             cat "$MOTO_KIEV_CONFIG" >> "$TARGET_CONFIG"
         fi
 
-        # 6. Désactivation logicielle stricte au niveau du .config
-        echo "Désactivation de la compatibilité 32 bits dans la configuration..."
-        sed -i 's/CONFIG_COMPAT=y/CONFIG_COMPAT=n/g' "$TARGET_CONFIG"
+        # 6. Maintien de la compatibilité 32 bits structurelle pour éviter l'erreur compat_uptr_t
+        echo "Configuration de la compatibilité structurelle..."
+        sed -i 's/CONFIG_COMPAT=n/CONFIG_COMPAT=y/g' "$TARGET_CONFIG"
         sed -i 's/CONFIG_VDSO32=y/CONFIG_VDSO32=n/g' "$TARGET_CONFIG"
-        echo "CONFIG_COMPAT=n" >> "$TARGET_CONFIG"
+        echo "CONFIG_COMPAT=y" >> "$TARGET_CONFIG"
         echo "CONFIG_VDSO32=n" >> "$TARGET_CONFIG"
 
         # 7. Création et injection du fragment personnalisé (KernelSU + Kprobes)
@@ -264,7 +263,7 @@ jobs:
         echo "CONFIG_OVERLAY_FS=y" >> "$TARGET_CONFIG"
         echo "CONFIG_ASSIST_SU=y" >> "$TARGET_CONFIG"
 
-        # 8. Suite des configurations conditionnelles du workflow (Patch désactivé pour éviter le crash do_mounts)
+        # 8. Configurations conditionnelles (Sans le patches.sh qui faisait crasher do_mounts)
         if grep -q "CONFIG_KSU" "$TARGET_CONFIG"; then
             sed -i 's/# CONFIG_KSU is not set/CONFIG_KSU=y/g' "$TARGET_CONFIG"
             sed -i 's/CONFIG_KSU=n/CONFIG_KSU=y/g' "$TARGET_CONFIG"
@@ -284,10 +283,24 @@ jobs:
         if [ "${{ env.DISABLE_CC_WERROR }}" = "true" ]; then
             echo "CONFIG_CC_WERROR=n" >> "$TARGET_CONFIG"
         fi
-        
-        # 9. Correctif de type pour mmu_notifier.h
-        echo "Application du correctif mmu_notifier.h..."
-        sed -i '14i #include <linux/mm_types.h>' include/linux/mmu_notifier.h
+
+        # 9. Correctif définitif pour l'erreur de type incomplet enum mmu_notifier_event
+        echo "Application du correctif structurel pour mmu_notifier.h..."
+        python3 -c '
+filename = "include/linux/mmu_notifier.h"
+with open(filename, "r") as f:
+    content = f.read()
+if "enum mmu_notifier_event {" in content and "/* PATCH_MMU */" not in content:
+    start_idx = content.find("enum mmu_notifier_event {")
+    end_idx = content.find("};", start_idx) + 2
+    enum_block = content[start_idx:end_idx]
+    guard = "#define _LINUX_MMU_NOTIFIER_H"
+    if guard in content:
+        patched = content.replace(guard, f"{guard}\n\n/* PATCH_MMU */\n{enum_block}\n")
+        with open(filename, "w") as f:
+            f.write(patched)
+        print("[+] Fichier mmu_notifier.h patché avec succès !")
+'
         
     - name: Setup ccache
       if: env.ENABLE_CCACHE == 'true'
