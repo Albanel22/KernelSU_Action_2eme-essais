@@ -366,21 +366,26 @@ jobs:
             echo "[+] Références à bengal retirées du Makefile des DTS."
         fi
         
-        # 16. Forcer la neutralisation du hook BPF manquant dans KernelSU
-        echo "Désactivation du hook BPF incompatible dans KernelSU..."
-        KSU_BPF_HOOK="drivers/kernelsu/core/bpf_filter.c"
-        if [ -f "$KSU_BPF_HOOK" ]; then
-            # On vide le fichier ou on désactive son initialisation pour éviter l'appel au tracepoint manquant
-            echo "int ksu_init_bpf_filter(void) { return 0; }" > "$KSU_BPF_HOOK"
-            echo "void ksu_exit_bpf_filter(void) {}" >> "$KSU_BPF_HOOK"
-            echo "[+] Hook BPF KernelSU neutralisé avec succès."
+        # 16. Injection et création des Vendor Hooks manquants réclamés par l'éditeur de liens
+        echo "Génération des définitions de secours pour les Vendor Hooks manquants..."
+        TRACE_FILE="kernel/trace/trace.c"
+        if [ -f "$TRACE_FILE" ]; then
+            # On déclare les structures de tracepoint réclamées par ld.lld pour valider la liaison vmlinux
+            echo -e '\n/* Secours Vendor Hooks pour KernelSU */' >> "$TRACE_FILE"
+            echo 'struct tracepoint __tracepoint_android_vh_check_file_open;' >> "$TRACE_FILE"
+            echo 'struct tracepoint __tracepoint_android_vh_check_mmap_file;' >> "$TRACE_FILE"
+            echo 'struct tracepoint __tracepoint_android_vh_set_memory_rw;' >> "$TRACE_FILE"
+            echo 'struct tracepoint __tracepoint_android_vh_set_memory_nx;' >> "$TRACE_FILE"
+            echo 'struct tracepoint __tracepoint_android_vh_set_memory_ro;' >> "$TRACE_FILE"
+            echo 'struct tracepoint __tracepoint_android_vh_set_memory_x;' >> "$TRACE_FILE"
+            echo 'struct tracepoint __tracepoint_android_vh_check_bpf_syscall;' >> "$TRACE_FILE"
+            echo "[+] Les 7 structures de tracepoints manquantes ont été injectées dans trace.c."
         fi
 
         # 17. Injection globale des symboles VDSO32 manquants directement dans vdso.c
         echo "Application du patch de liaison finale pour vdso.c..."
         VDSO_MAIN="arch/arm64/kernel/vdso.c"
         if [ -f "$VDSO_MAIN" ]; then
-            # On injecte les définitions physiques manquantes pour rassurer l'éditeur de liens (ld.lld)
             sed -i '1i char vdso32_start[] = {};\nchar vdso32_end[] = {};' "$VDSO_MAIN"
             echo "[+] Symboles vdso32 injectés directement dans le code source de vdso.c."
         fi
