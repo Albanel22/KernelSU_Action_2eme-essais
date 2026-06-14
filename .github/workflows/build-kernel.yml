@@ -366,6 +366,14 @@ jobs:
             echo "[+] Références à bengal retirées du Makefile des DTS."
         fi
         
+        # 15.5 [CRUCIAL] Recalibrage du dossier KernelSU
+        echo "Vérification et déplacement des sources de KernelSU..."
+        # Si KernelSU a été cloné à la racine, on le déplace dans drivers/
+        if [ -d "kernelsu" ] && [ ! -d "drivers/kernelsu" ]; then
+            mv kernelsu drivers/kernelsu
+            echo "[+] KernelSU déplacé avec succès de la racine vers drivers/kernelsu"
+        fi
+
         # 16. Injection propre du Hook KernelSU pour Noyau NON-GKI (fs/open.c)
         echo "Application du patch de hooking précis Non-GKI (fs/open.c)..."
         if [ -f "fs/open.c" ]; then
