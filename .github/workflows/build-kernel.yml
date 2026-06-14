@@ -212,50 +212,6 @@ jobs:
         KERNEL_ROOT="$GITHUB_WORKSPACE/kernel_workspace/android-kernel"
         cd "$KERNEL_ROOT"
         
-        # 1. Restauration propre des fichiers Makefile modifiés précédemment
-        git checkout HEAD arch/arm64/Makefile arch/arm64/kernel/vdso32/Makefile 2>/dev/null || true
-
-        # 2. Création préventive du fichier de dépendance manquant (L'astuce du fantôme)
-        mkdir -p out/include/generated
-        touch out/include/generated/vdso32-offsets.h
-        echo "/* Généré automatiquement pour contourner le build VDSO32 */" > out/include/generated/vdso32-offsets.h
-
-        # 3. Empêcher la réécriture ou la suppression de ce fichier par le build
-        sed -i 's/vdso_prepare\s*:\s*vdso32_prepare/vdso_prepare:/g' arch/arm64/Makefile
-
-        # 4. Détermination et validation du defconfig de base
-        CONFIG_NAME=$(basename "${{ env.KERNEL_CONFIG }}")
-        REAL_CONFIG_PATH=$(find arch/arm64/configs/ -type f -name "$CONFIG_NAME" | head -n 1)
-        
-        if [ -z "$REAL_CONFIG_PATH" ]; then
-            echo "ERREUR : Impossible de trouver le fichier de base $CONFIG_NAME"
-            exit 1
-        fi
-        TARGET_CONFIG="$REAL_CONFIG_PATH"
-        echo "Fichier de configuration de base sélectionné : $TARGET_CONFIG"
-
-        # 5. Injection des configurations spécifiques à l'appareil Kiev de Motorola
-        MOTO_KIEV_CONFIG="arch/arm64/configs/vendor/ext_config/kiev-default.config"
-        if [ -f "$MOTO_KIEV_CONFIG" ]; then
-            echo "Fusion de la configuration spécifique Kiev ($MOTO_KIEV_CONFIG)..."
-            cat "$MOTO_KIEV_CONFIG" >> "$TARGET_CONFIG"
-        fi
-
-        # 6. Maintien de la compatibilité 32 bits (requis pour les types de pointeurs comme compat_uptr_t)
-        echo "Configuration de la compatibilité structurelle..."
-        sed -i 's/CONFIG_COMPAT=n/CONFIG_COMPAT=y/g' "$TARGET_CONFIG"
-        sed -i 's/CONFIG_VDSO32=y/CONFIG_VDSO32=n/g' "$TARGET_CONFIG"
-        echo "CONFIG_COMPAT=y" >> "$TARGET_CONFIG"
-        echo "CONFIG_VDSO32=n" >> "$TARGET_CONFIG"
-
-        # 7. Création et injection du fragment personnalisé (KernelSU + Kprobes)
-        echo "Création et injection du fragment de configuration KernelSU..."
-        cat << 'EOF' >> "$TARGET_CONFIG"
-    - name: Setup Configuration for Kernel
-      run: |
-        KERNEL_ROOT="$GITHUB_WORKSPACE/kernel_workspace/android-kernel"
-        cd "$KERNEL_ROOT"
-        
         # 1. Restauration propre des fichiers modifiés si nécessaire
         git checkout HEAD arch/arm64/Makefile arch/arm64/kernel/vdso32/Makefile 2>/dev/null || true
 
@@ -308,16 +264,14 @@ jobs:
         echo "CONFIG_OVERLAY_FS=y" >> "$TARGET_CONFIG"
         echo "CONFIG_ASSIST_SU=y" >> "$TARGET_CONFIG"
 
-        # 8. Suite des configurations conditionnelles du workflow
-        if [ "${{ env.APPLY_KSU_PATCH }}" = "true" ]; then
-            bash $GITHUB_WORKSPACE/patches/patches.sh
-            if grep -q "CONFIG_KSU" "$TARGET_CONFIG"; then
-                sed -i 's/# CONFIG_KSU is not set/CONFIG_KSU=y/g' "$TARGET_CONFIG"
-                sed -i 's/CONFIG_KSU=n/CONFIG_KSU=y/g' "$TARGET_CONFIG"
-            else
-                echo "CONFIG_KSU=y" >> "$TARGET_CONFIG"
-            fi
+        # 8. Suite des configurations conditionnelles du workflow (Patch désactivé pour éviter le crash do_mounts)
+        if grep -q "CONFIG_KSU" "$TARGET_CONFIG"; then
+            sed -i 's/# CONFIG_KSU is not set/CONFIG_KSU=y/g' "$TARGET_CONFIG"
+            sed -i 's/CONFIG_KSU=n/CONFIG_KSU=y/g' "$TARGET_CONFIG"
+        else
+            echo "CONFIG_KSU=y" >> "$TARGET_CONFIG"
         fi
+
         if [ "${{ env.ADD_OVERLAYFS_CONFIG }}" = "true" ]; then
             echo "CONFIG_OVERLAY_FS=y" >> "$TARGET_CONFIG"
         fi
