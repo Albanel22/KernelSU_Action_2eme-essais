@@ -200,12 +200,16 @@ jobs:
         fi
 
     - name: Setup KernelSU
-      if: env.ENABLE_KERNELSU == 'true'
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s ${{ env.KERNELSU_TAG }}
-        KSU_VERSION=$(cd KernelSU && expr $(git rev-list --count HEAD) + 10200)
-        echo "UPLOADNAME=-KernelSU_$KSU_VERSION" >> $GITHUB_ENV
+        # Ta commande actuelle qui télécharge ou initialise KSU (ex: curl ou git clone)
+        # ...
+        
+        # AJOUTE CES LIGNES ICI POUR VERROUILLER LA VERSION COMPATIBLE :
+        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel/KernelSU
+        git fetch --tags
+        git checkout v0.9.5
+        echo "[+] Version de KernelSU verrouillée sur la v0.9.5 pour compatibilité noyau 4.19"
 
     - name: Setup Configuration for Kernel
       run: |
