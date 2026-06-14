@@ -366,20 +366,18 @@ jobs:
             echo "[+] Références à bengal retirées du Makefile des DTS."
         fi
         
-        # 16. Injection et création des Vendor Hooks manquants réclamés par l'éditeur de liens
-        echo "Génération des définitions de secours pour les Vendor Hooks manquants..."
-        TRACE_FILE="kernel/trace/trace.c"
-        if [ -f "$TRACE_FILE" ]; then
-            # On déclare les structures de tracepoint réclamées par ld.lld pour valider la liaison vmlinux
-            echo -e '\n/* Secours Vendor Hooks pour KernelSU */' >> "$TRACE_FILE"
-            echo 'struct tracepoint __tracepoint_android_vh_check_file_open;' >> "$TRACE_FILE"
-            echo 'struct tracepoint __tracepoint_android_vh_check_mmap_file;' >> "$TRACE_FILE"
-            echo 'struct tracepoint __tracepoint_android_vh_set_memory_rw;' >> "$TRACE_FILE"
-            echo 'struct tracepoint __tracepoint_android_vh_set_memory_nx;' >> "$TRACE_FILE"
-            echo 'struct tracepoint __tracepoint_android_vh_set_memory_ro;' >> "$TRACE_FILE"
-            echo 'struct tracepoint __tracepoint_android_vh_set_memory_x;' >> "$TRACE_FILE"
-            echo 'struct tracepoint __tracepoint_android_vh_check_bpf_syscall;' >> "$TRACE_FILE"
-            echo "[+] Les 7 structures de tracepoints manquantes ont été injectées dans trace.c."
+        # 16. Correctif d'injection manuelle pour Noyau NON-GKI (fs/open.c)
+        echo "Application du patch Non-GKI pour fs/open.c..."
+        FS_OPEN="fs/open.c"
+        if [ -f "$FS_OPEN" ]; then
+            # On vérifie si KernelSU n'est pas déjà injecté dans le fichier
+            if ! grep -q "ksu_handle_open" "$FS_OPEN"; then
+                # On cherche la fonction do_dentry_open et on y injecte le hook de KernelSU
+                sed -i '/do_dentry_open(/,/^{/ {
+                    /^{/ a\\n\t// Hook KernelSU pour noyau Non-GKI\n\t{ extern int ksu_handle_open(struct file *file); ksu_handle_open(f); }
+                }' "$FS_OPEN"
+                echo "[+] Hook KernelSU injecté manuellement dans fs/open.c"
+            fi
         fi
 
         # 17. Injection globale des symboles VDSO32 manquants directement dans vdso.c
