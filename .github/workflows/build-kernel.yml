@@ -234,19 +234,19 @@ jobs:
         echo "Téléchargement propre de KernelSU v0.9.5 dans drivers/kernelsu..."
         git clone https://github.com/tiann/KernelSU.git -b v0.9.5 drivers/kernelsu
 
-        # [RECONSTRUCTION PATH CONFIG] Détection automatique et relocalisation du defconfig
-        echo "Recherche dynamique du fichier defconfig dans le noyau..."
-        CONFIG_FOUND=$(find arch/arm64/configs/ -name "*sm8250*defconfig" -print -quit)
-        if [ ! -z "$CONFIG_FOUND" ]; then
-            echo "[+] Fichier defconfig trouvé ici : $CONFIG_FOUND"
+        # [RECONSTRUCTION PATH CONFIG] Liaison de la configuration Kona (SM8250)
+        echo "Configuration du defconfig Kona pour processeur SM8250..."
+        if [ -f "arch/arm64/configs/vendor/kona-perf_defconfig" ]; then
+            echo "[+] Fichier kona-perf_defconfig détecté !"
+            # On s'assure que le sous-dossier vendor existe
             mkdir -p arch/arm64/configs/vendor
-            cp "$CONFIG_FOUND" arch/arm64/configs/sm8250-perf_defconfig
-            cp "$CONFIG_FOUND" arch/arm64/configs/vendor/sm8250-perf_defconfig
-            echo "[+] Fichier defconfig cloné avec succès aux emplacements attendus."
+            
+            # On crée les copies sous le nom recherché par le script principal (sm8250)
+            cp arch/arm64/configs/vendor/kona-perf_defconfig arch/arm64/configs/sm8250-perf_defconfig
+            cp arch/arm64/configs/vendor/kona-perf_defconfig arch/arm64/configs/vendor/sm8250-perf_defconfig
+            echo "[+] Fichier kona-perf_defconfig lié avec succès en tant que sm8250-perf_defconfig."
         else
-            echo "[-] ERREUR CRITIQUE : Impossible de trouver un fichier defconfig pour sm8250 !"
-            echo "Contenu de arch/arm64/configs/ :"
-            ls -R arch/arm64/configs/
+            echo "[-] ERREUR : Impossible de trouver arch/arm64/configs/vendor/kona-perf_defconfig"
             exit 1
         fi
 
