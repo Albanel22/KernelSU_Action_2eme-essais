@@ -330,11 +330,12 @@ jobs:
         key: build-kernel-${{ env.DEVICE }}${{ env.LOCALVERSION }}${{ env.UPLOADNAME }}
         max-size: 2G
 
-    - name: Build kernel
+    - name: Compile Kernel
       env:
         # Forçage global au niveau de l'environnement GitHub
         OBJCOPY: llvm-objcopy
         STRIP: llvm-strip
+        LD: ld.lld
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         export PATH=$GITHUB_WORKSPACE/kernel_workspace/clang-aosp/bin:$PATH
@@ -346,17 +347,17 @@ jobs:
           export KSU_EXPECTED_HASH=${{ env.KSU_EXPECTED_HASH }}
         fi
         
-        # 1. Génération de la configuration (Correction : suppression du 'run:|' en trop)
-        make -j$(nproc) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- CLANG_TRIPLE=aarch64-linux-gnu- CC=clang OBJCOPY=llvm-objcopy
+        # 1. Génération de la configuration (Correction : Ajout de LD=ld.lld)
+        make -j$(nproc) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- CLANG_TRIPLE=aarch64-linux-gnu- CC=clang OBJCOPY=llvm-objcopy LD=ld.lld
         
         # 2. Tentative de compilation rapide (Multi-cœurs)
         echo "========================================================="
         echo " Lancement de la compilation principale (Multi-cœurs) "
         echo "========================================================="
         if [ "${{ env.ENABLE_CCACHE }}" = "true" ]; then
-            make -j$(nproc --all) CC="ccache clang" CLANG_TRIPLE=aarch64-linux-gnu- OBJCOPY=llvm-objcopy STRIP=llvm-strip O=out ARCH=${{ env.ARCH }} ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }} || MULTI_FAILED=true
+            make -j$(nproc --all) CC="ccache clang" CLANG_TRIPLE=aarch64-linux-gnu- OBJCOPY=llvm-objcopy STRIP=llvm-strip LD=ld.lld O=out ARCH=${{ env.ARCH }} ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }} || MULTI_FAILED=true
         else
-            make -j$(nproc --all) CC=clang CLANG_TRIPLE=aarch64-linux-gnu- OBJCOPY=llvm-objcopy STRIP=llvm-strip O=out ARCH=${{ env.ARCH }} ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }} || MULTI_FAILED=true
+            make -j$(nproc --all) CC=clang CLANG_TRIPLE=aarch64-linux-gnu- OBJCOPY=llvm-objcopy STRIP=llvm-strip LD=ld.lld O=out ARCH=${{ env.ARCH }} ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }} || MULTI_FAILED=true
         fi
 
         # 3. Mode Secours (Mono-cœur) pour isoler l'erreur si échec
@@ -366,11 +367,12 @@ jobs:
             echo " isoler la ligne d'erreur exacte...                      "
             echo "========================================================="
             if [ "${{ env.ENABLE_CCACHE }}" = "true" ]; then
-                make -j1 CC="ccache clang" CLANG_TRIPLE=aarch64-linux-gnu- OBJCOPY=llvm-objcopy STRIP=llvm-strip O=out ARCH=${{ env.ARCH }} ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }}
+                make -j1 CC="ccache clang" CLANG_TRIPLE=aarch64-linux-gnu- OBJCOPY=llvm-objcopy STRIP=llvm-strip LD=ld.lld O=out ARCH=${{ env.ARCH }} ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }}
             else
-                make -j1 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- OBJCOPY=llvm-objcopy STRIP=llvm-strip O=out ARCH=${{ env.ARCH }} ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }}
+                make -j1 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- OBJCOPY=llvm-objcopy STRIP=llvm-strip LD=ld.lld O=out ARCH=${{ env.ARCH }} ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }}
             fi
         fi
+
 
     - name: Make Anykernel3
       if: env.CHECK_FILE_IS_OK == 'true' && env.USE_CUSTOM_ANYKERNEL3 != 'true'
