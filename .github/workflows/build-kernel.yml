@@ -238,10 +238,7 @@ jobs:
         echo "Configuration du defconfig Kona pour processeur SM8250..."
         if [ -f "arch/arm64/configs/vendor/kona-perf_defconfig" ]; then
             echo "[+] Fichier kona-perf_defconfig détecté !"
-            # On s'assure que le sous-dossier vendor existe
             mkdir -p arch/arm64/configs/vendor
-            
-            # On crée les copies sous le nom recherché par le script principal (sm8250)
             cp arch/arm64/configs/vendor/kona-perf_defconfig arch/arm64/configs/sm8250-perf_defconfig
             cp arch/arm64/configs/vendor/kona-perf_defconfig arch/arm64/configs/vendor/sm8250-perf_defconfig
             echo "[+] Fichier kona-perf_defconfig lié avec succès en tant que sm8250-perf_defconfig."
@@ -296,6 +293,12 @@ jobs:
             echo 'struct tracepoint __tracepoint_android_vh_set_memory_rw;' >> kernel/trace/trace.c
             echo 'struct tracepoint __tracepoint_android_vh_set_memory_nx;' >> kernel/trace/trace.c
             echo 'struct tracepoint __tracepoint_android_vh_check_bpf_syscall;' >> kernel/trace/trace.c
+        fi
+
+        # 18.5 Correctif de compatibilité pour l'erreur Objcopy VDSO
+        echo "Application du patch de compatibilité pour la Toolchain (VDSO Objcopy)..."
+        if [ -f "arch/arm64/kernel/vdso/Makefile" ]; then
+            sed -i 's/\$(OBJCOPY) -S/\$(OBJCOPY) -S --remove-section=.debug_info --remove-section=.debug_aranges --remove-section=.debug_line/g' arch/arm64/kernel/vdso/Makefile
         fi
 
         # 19. Forcer la liaison finale de KernelSU dans le Makefile principal des drivers
