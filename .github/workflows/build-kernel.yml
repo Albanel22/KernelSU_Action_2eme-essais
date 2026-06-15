@@ -295,11 +295,13 @@ jobs:
             echo 'struct tracepoint __tracepoint_android_vh_check_bpf_syscall;' >> kernel/trace/trace.c
         fi
 
-        # 18.5 Forçage de LLVM-Objcopy pour le VDSO
-        echo "Forçage de l'utilisation de llvm-objcopy pour le VDSO..."
-        if [ -f "arch/arm64/kernel/vdso/Makefile" ]; then
-            sed -i 's/\$(OBJCOPY)/llvm-objcopy/g' arch/arm64/kernel/vdso/Makefile
-        fi
+        # 18.5 Masquage et redirection globale d'objcopy vers llvm-objcopy
+        echo "Création d'un wrapper de redirection pour forcer llvm-objcopy..."
+        mkdir -p $GITHUB_WORKSPACE/bin_override
+        ln -sf $(which llvm-objcopy) $GITHUB_WORKSPACE/bin_override/objcopy
+        ln -sf $(which llvm-strip) $GITHUB_WORKSPACE/bin_override/strip
+        echo "$GITHUB_WORKSPACE/bin_override" >> $GITHUB_PATH
+        echo "[+] Redirection du PATH système injectée avec succès."
 
         # 19. Forcer la liaison finale de KernelSU dans le Makefile principal des drivers
         echo "Liaison explicite de KernelSU dans le Makefile des drivers..."
