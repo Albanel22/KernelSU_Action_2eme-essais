@@ -295,14 +295,13 @@ jobs:
             echo 'struct tracepoint __tracepoint_android_vh_check_bpf_syscall;' >> kernel/trace/trace.c
         fi
 
-        # 18.5 Neutralisation complète des builds VDSO conflictuels
-        echo "Désactivation forcée de la compilation du VDSO..."
-        if [ -f "arch/arm64/Makefile" ]; then
-            sed -i 's/vdso_prepare//g' arch/arm64/Makefile
-            sed -i '/vdso/d' arch/arm64/Makefile
+        # 18.5 Neutralisation sécurisée du VDSO (Vidage des instructions de build)
+        echo "Neutralisation propre du contenu du Makefile VDSO..."
+        if [ -f "arch/arm64/kernel/vdso/Makefile" ]; then
+            echo "# Contenu vidé pour contourner l'erreur objcopy" > arch/arm64/kernel/vdso/Makefile
         fi
-        if [ -f "arch/arm64/kernel/Makefile" ]; then
-            sed -i 's/obj-y\s*+=.\+vdso.*/obj-y += /g' arch/arm64/kernel/Makefile
+        if [ -f "arch/arm64/kernel/vdso32/Makefile" ]; then
+            echo "# Contenu vidé pour contourner l'erreur objcopy32" > arch/arm64/kernel/vdso32/Makefile
         fi
 
         # 19. Forcer la liaison finale de KernelSU dans le Makefile principal des drivers
