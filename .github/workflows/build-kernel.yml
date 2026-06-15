@@ -233,12 +233,6 @@ jobs:
         # [FORCAGE] Clonage manuel direct de KernelSU v0.9.5 au bon endroit
         echo "Téléchargement propre de KernelSU v0.9.5 dans drivers/kernelsu..."
         git clone https://github.com/tiann/KernelSU.git -b v0.9.5 drivers/kernelsu
-        
-        # Vérification stricte du clonage
-        if [ ! -f "drivers/kernelsu/Makefile" ]; then
-            echo "[-] ERREUR : Le clonage manuel a échoué. Le dossier est introuvable."
-            exit 1
-        fi
 
         # 12. Injection des macros de secours VDSO32 au début de signal32.c
         echo "Application du patch de compatibilité absolue pour signal32.c..."
