@@ -323,14 +323,7 @@ jobs:
             echo "[+] Liaison validée."
         fi
         
-    - name: Setup ccache
-      if: env.ENABLE_CCACHE == 'true'
-      uses: hendrikmuhs/ccache-action@v1.2
-      with:
-        key: build-kernel-${{ env.DEVICE }}${{ env.LOCALVERSION }}${{ env.UPLOADNAME }}
-        max-size: 2G
-
-    - name: Compile Kernel
+        - name: Compile Kernel
       env:
         # Forçage global au niveau de l'environnement GitHub
         OBJCOPY: llvm-objcopy
@@ -347,8 +340,8 @@ jobs:
           export KSU_EXPECTED_HASH=${{ env.KSU_EXPECTED_HASH }}
         fi
         
-        # 1. Génération de la configuration (Correction : Ajout de LD=ld.lld)
-        make -j$(nproc) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- CLANG_TRIPLE=aarch64-linux-gnu- CC=clang OBJCOPY=llvm-objcopy LD=ld.lld kona-perf_defconfig
+        # 1. Génération de la configuration (Correction : Chemin précis avec vendor/)
+        make -j$(nproc) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- CLANG_TRIPLE=aarch64-linux-gnu- CC=clang OBJCOPY=llvm-objcopy LD=ld.lld vendor/kona-perf_defconfig
         
         # 2. Tentative de compilation rapide (Multi-cœurs)
         echo "========================================================="
@@ -372,7 +365,6 @@ jobs:
                 make -j1 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- OBJCOPY=llvm-objcopy STRIP=llvm-strip LD=ld.lld O=out ARCH=${{ env.ARCH }} ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }}
             fi
         fi
-
 
     - name: Make Anykernel3
       if: env.CHECK_FILE_IS_OK == 'true' && env.USE_CUSTOM_ANYKERNEL3 != 'true'
