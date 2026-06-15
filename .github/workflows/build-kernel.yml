@@ -219,32 +219,44 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         
-        # [CRUCIAL] Nettoyage complet des Makefile et anciens répertoires
-        echo "Nettoyage des résidus KernelSU des builds précédents..."
-        rm -rf kernelsu
-        rm -rf drivers/kernelsu
-        if [ -f "drivers/Makefile" ]; then
-            sed -i '/kernelsu/d' drivers/Makefile
-        fi
-        if [ -f "fs/open.c" ]; then
-            sed -i '/ksu_handle_open/d' fs/open.c
-        fi
+        # [CRUCIAL] Nettoyage complet des résidus
+        echo "Nettoyage des résidus des builds précédents..."
+        rm -rf kernelsu drivers/kernelsu
+        
+        # Réparation des Makefiles originaux si altérés localement
+        git checkout -- arch/arm64/kernel/vdso/Makefile 2>/dev/null || true
+        git checkout -- arch/arm64/kernel/vdso32/Makefile 2>/dev/null || true
+        git checkout -- arch/arm64/Makefile 2>/dev/null || true
 
-        # [FORCAGE] Clonage manuel direct de KernelSU v0.9.5 au bon endroit
+        # [FORCAGE] Clonage propre de KernelSU v0.9.5 au bon endroit
         echo "Téléchargement propre de KernelSU v0.9.5 dans drivers/kernelsu..."
         git clone https://github.com/tiann/KernelSU.git -b v0.9.5 drivers/kernelsu
 
         # [RECONSTRUCTION PATH CONFIG] Liaison de la configuration Kona (SM8250)
         echo "Configuration du defconfig Kona pour processeur SM8250..."
         if [ -f "arch/arm64/configs/vendor/kona-perf_defconfig" ]; then
-            echo "[+] Fichier kona-perf_defconfig détecté !"
             mkdir -p arch/arm64/configs/vendor
             cp arch/arm64/configs/vendor/kona-perf_defconfig arch/arm64/configs/sm8250-perf_defconfig
             cp arch/arm64/configs/vendor/kona-perf_defconfig arch/arm64/configs/vendor/sm8250-perf_defconfig
-            echo "[+] Fichier kona-perf_defconfig lié avec succès en tant que sm8250-perf_defconfig."
         else
-            echo "[-] ERREUR : Impossible de trouver arch/arm64/configs/vendor/kona-perf_defconfig"
+            echo "[-] ERREUR : Impossible de trouver kona-perf_defconfig"
             exit 1
+        fi
+
+        # Injection de secours MODULE_IMPORT_NS pour KernelSU
+        if [ -f "drivers/kernelsu/core/init.c" ]; then
+            sed -i '1i #ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif' drivers/kernelsu/core/init.c
+        fi
+
+        # Injection du Hook KernelSU (fs/open.c)
+        if [ -f "fs/open.c" ]; then
+            sed -i '/int do_dentry_open(/,/^[}]/s/return 0;/{ extern int ksu_handle_open(struct file *file); ksu_handle_open(f); } return 0;/g' fs/open.c
+        fi
+
+        # Forcer l'inclusion de KernelSU dans les drivers
+        if [ -f "drivers/Makefile" ]; then
+            sed -i '/kernelsu/d' drivers/Makefile
+            echo "obj-y += kernelsu/" >> drivers/Makefile
         fi
 
         # 12. Injection des macros de secours VDSO32 au début de signal32.c
@@ -331,7 +343,8 @@ jobs:
         fi
         
         # 1. Génération de la configuration
-        make O=out ARCH=${{ env.ARCH }} CC=clang CLANG_TRIPLE=aarch64-linux-gnu- STRIP=llvm-strip ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }} ${{ env.KERNEL_CONFIG }}
+        run: |
+        make -j$(nproc) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- CLANG_TRIPLE=aarch64-linux-gnu- CC=clang OBJCOPY=llvm-objcopy STRIP=llvm-strip
         
         # 2. Tentative de compilation rapide (Multi-cœurs)
         echo "========================================================="
