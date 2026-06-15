@@ -219,194 +219,80 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         
-        # [IMPORTANT] On force la désactivation de VDSO32 directement dans le fichier source defconfig
-        DEFCONFIG_FILE="arch/arm64/configs/vendor/sm8250-perf_defconfig"
-        if [ -f "$DEFCONFIG_FILE" ]; then
-            # On supprime les anciennes lignes CONFIG_VDSO32 si elles existent
-            sed -i '/CONFIG_VDSO32/d' "$DEFCONFIG_FILE"
-            # On écrit proprement la désactivation à la fin du fichier
-            echo "CONFIG_VDSO32=n" >> "$DEFCONFIG_FILE"
-            echo "[+] CONFIG_VDSO32=n a été injecté dans le defconfig."
+        # [CRUCIAL] Nettoyage complet des Makefile et anciens répertoires
+        echo "Nettoyage des résidus KernelSU des builds précédents..."
+        rm -rf kernelsu
+        rm -rf drivers/kernelsu
+        if [ -f "drivers/Makefile" ]; then
+            sed -i '/kernelsu/d' drivers/Makefile
         fi
+        if [ -f "fs/open.c" ]; then
+            sed -i '/ksu_handle_open/d' fs/open.c
+        fi
+
+        # [FORCAGE] Clonage manuel direct de KernelSU v0.9.5 au bon endroit
+        echo "Téléchargement propre de KernelSU v0.9.5 dans drivers/kernelsu..."
+        git clone https://github.com/tiann/KernelSU.git -b v0.9.5 drivers/kernelsu
         
-        # 1. Restauration propre des fichiers modifiés si nécessaire
-        git checkout HEAD arch/arm64/Makefile arch/arm64/kernel/vdso32/Makefile include/linux/mmu_notifier.h 2>/dev/null || true
-
-        # 2. L'astuce du fantôme : Création préventive de l'en-tête généré pour éviter les erreurs de dépendance
-        mkdir -p out/include/generated
-        touch out/include/generated/vdso32-offsets.h
-        echo "/* Généré automatiquement */" > out/include/generated/vdso32-offsets.h
-
-        # 3. Court-circuit radical du VDSO32 (Élimine l'erreur sigreturn.S)
-        echo "obj-y :=" > arch/arm64/kernel/vdso32/Makefile
-        echo "targets :=" >> arch/arm64/kernel/vdso32/Makefile
-        echo "clean-files :=" >> arch/arm64/kernel/vdso32/Makefile
-        
-        # On retire la dépendance vdso32 du Makefile principal
-        sed -i 's/vdso_prepare\s*:\s*vdso32_prepare/vdso_prepare:/g' arch/arm64/Makefile
-        sed -i 's/vdso32_prepare//g' arch/arm64/Makefile
-
-        # 4. Détermination, validation et création forcée du defconfig attendu par le Makefile
-        CONFIG_NAME=$(basename "${{ env.KERNEL_CONFIG }}")
-        REAL_CONFIG_PATH=$(find arch/arm64/configs/ -type f -name "*sm8250*" | grep -i perf | head -n 1)
-        
-        if [ -z "$REAL_CONFIG_PATH" ]; then
-            REAL_CONFIG_PATH=$(find arch/arm64/configs/ -type f -name "*sm8250*" | head -n 1)
-        fi
-        if [ -z "$REAL_CONFIG_PATH" ]; then
-            REAL_CONFIG_PATH=$(find arch/arm64/configs/ -type f -name "*perf_defconfig*" | head -n 1)
-        fi
-        if [ -z "$REAL_CONFIG_PATH" ]; then
-            echo "ATTENTION : Aucune config SM8250 trouvée, utilisation du defconfig de secours"
-            REAL_CONFIG_PATH="arch/arm64/configs/defconfig"
-        fi
-
-        echo "Le script a déniché ce vrai fichier source : $REAL_CONFIG_PATH"
-
-        mkdir -p arch/arm64/configs/vendor
-        cp -f "$REAL_CONFIG_PATH" "arch/arm64/configs/vendor/$CONFIG_NAME"
-        TARGET_CONFIG="arch/arm64/configs/vendor/$CONFIG_NAME"
-        echo "Fichier de configuration cloné et prêt à l'emplacement requis : $TARGET_CONFIG"
-
-        # 5. Injection des configurations spécifiques à l'appareil Kiev de Motorola
-        MOTO_KIEV_CONFIG="arch/arm64/configs/vendor/ext_config/kiev-default.config"
-        if [ -f "$MOTO_KIEV_CONFIG" ]; then
-            echo "Fusion de la configuration spécifique Kiev ($MOTO_KIEV_CONFIG)..."
-            cat "$MOTO_KIEV_CONFIG" >> "$TARGET_CONFIG"
-        fi
-
-        # 6. Maintien de la compatibilité 32 bits structurelle pour éviter l'erreur compat_uptr_t
-        echo "Configuration de la compatibilité structurelle..."
-        sed -i 's/CONFIG_COMPAT=n/CONFIG_COMPAT=y/g' "$TARGET_CONFIG"
-        sed -i 's/CONFIG_VDSO32=y/CONFIG_VDSO32=n/g' "$TARGET_CONFIG"
-        echo "CONFIG_COMPAT=y" >> "$TARGET_CONFIG"
-        echo "CONFIG_VDSO32=n" >> "$TARGET_CONFIG"
-
-        # 7. Création et injection du fragment personnalisé (KernelSU + Kprobes)
-        echo "Création et injection du fragment de configuration KernelSU..."
-        echo "CONFIG_MODULES=y" >> "$TARGET_CONFIG"
-        echo "CONFIG_KPROBES=y" >> "$TARGET_CONFIG"
-        echo "CONFIG_HAVE_KPROBES=y" >> "$TARGET_CONFIG"
-        echo "CONFIG_KPROBE_EVENTS=y" >> "$TARGET_CONFIG"
-        echo "CONFIG_OVERLAY_FS=y" >> "$TARGET_CONFIG"
-        echo "CONFIG_ASSIST_SU=y" >> "$TARGET_CONFIG"
-
-        # 8. Configurations conditionnelles
-        if grep -q "CONFIG_KSU" "$TARGET_CONFIG"; then
-            sed -i 's/# CONFIG_KSU is not set/CONFIG_KSU=y/g' "$TARGET_CONFIG"
-            sed -i 's/CONFIG_KSU=n/CONFIG_KSU=y/g' "$TARGET_CONFIG"
-        else
-            echo "CONFIG_KSU=y" >> "$TARGET_CONFIG"
-        fi
-
-        if [ "${{ env.ADD_OVERLAYFS_CONFIG }}" = "true" ]; then
-            echo "CONFIG_OVERLAY_FS=y" >> "$TARGET_CONFIG"
-        fi
-        if [ "${{ env.DISABLE-LTO }}" = "true" ]; then
-            sed -i 's/CONFIG_LTO=y/CONFIG_LTO=n/' "$TARGET_CONFIG"
-            sed -i 's/CONFIG_LTO_CLANG=y/CONFIG_LTO_CLANG=n/' "$TARGET_CONFIG"
-            sed -i 's/CONFIG_THINLTO=y/CONFIG_THINLTO=n/' "$TARGET_CONFIG"
-            echo "CONFIG_LTO_NONE=y" >> "$TARGET_CONFIG"
-        fi
-        if [ "${{ env.DISABLE_CC_WERROR }}" = "true" ]; then
-            echo "CONFIG_CC_WERROR=n" >> "$TARGET_CONFIG"
-        fi
-
-        # 9. Correctif structurel pour mmu_notifier.h via injection directe
-        echo "Application du correctif mmu_notifier.h..."
-        sed -i '/^enum mmu_notifier_event {/,/^};/d' include/linux/mmu_notifier.h
-        sed -i '/#define _LINUX_MMU_NOTIFIER_H/a \\nenum mmu_notifier_event {\n\tMMU_NOTIFIER_UNREGISTER,\n\tMMU_NOTIFIER_RELEASE,\n};' include/linux/mmu_notifier.h
-
-        # 10. Forcer l'utilisation de formats de débogage standard rétrocompatibles
-        echo "Optimisation des formats de débogage..."
-        echo "CONFIG_DEBUG_INFO_DWARF4=y" >> "$TARGET_CONFIG"
-        sed -i 's/CONFIG_DEBUG_INFO_DWARF5=y/CONFIG_DEBUG_INFO_DWARF4=y/g' "$TARGET_CONFIG"
-
-        # 11. Masquage de l'ancien objcopy et strip par les versions LLVM de Clang
-        echo "Forçage de la redirection objcopy et strip vers LLVM..."
-        CLANG_BIN_DIR=$(dirname $(find $GITHUB_WORKSPACE/kernel_workspace -name "clang" -type f | head -n 1))
-        if [ -d "$CLANG_BIN_DIR" ]; then
-            ln -sf "$CLANG_BIN_DIR/llvm-objcopy" "$CLANG_BIN_DIR/aarch64-linux-gnu-objcopy"
-            ln -sf "$CLANG_BIN_DIR/llvm-objcopy" "$CLANG_BIN_DIR/objcopy"
-            ln -sf "$CLANG_BIN_DIR/llvm-strip" "$CLANG_BIN_DIR/aarch64-linux-gnu-strip"
-            ln -sf "$CLANG_BIN_DIR/llvm-strip" "$CLANG_BIN_DIR/strip"
-            echo "$CLANG_BIN_DIR" >> $GITHUB_PATH
+        # Vérification stricte du clonage
+        if [ ! -f "drivers/kernelsu/Makefile" ]; then
+            echo "[-] ERREUR : Le clonage manuel a échoué. Le dossier est introuvable."
+            exit 1
         fi
 
         # 12. Injection des macros de secours VDSO32 au début de signal32.c
         echo "Application du patch de compatibilité absolue pour signal32.c..."
-        SIGNAL_FILE="arch/arm64/kernel/signal32.c"
-        if [ -f "$SIGNAL_FILE" ]; then
-            # On injecte directement les définitions manquantes à la ligne 1 du fichier
-            sed -i '1i #define vdso_offset_compat_rt_sigreturn_thumb 0\n#define vdso_offset_compat_rt_sigreturn_arm 0\n#define vdso_offset_compat_sigreturn_thumb 0\n#define vdso_offset_compat_sigreturn_arm 0\n#define VDSO_LBASE 0' "$SIGNAL_FILE"
-            echo "[+] Variables factices VDSO32 injectées avec succès dans signal32.c."
+        if [ -f "arch/arm64/kernel/signal32.c" ]; then
+            sed -i '1i #define vdso_offset_compat_rt_sigreturn_thumb 0\n#define vdso_offset_compat_rt_sigreturn_arm 0\n#define vdso_offset_compat_sigreturn_thumb 0\n#define vdso_offset_compat_sigreturn_arm 0\n#define VDSO_LBASE 0' arch/arm64/kernel/signal32.c
         fi
 
         # 13. Correctif pour l'erreur EFI mmap_sem -> mmap_lock
-        echo "Application du correctif pour drivers/firmware/efi/efi.c..."
-        EFI_FILE="drivers/firmware/efi/efi.c"
-        if [ -f "$EFI_FILE" ]; then
-            sed -i 's/\.mmap_sem\s*=\s*__RWSEM_INITIALIZER(efi_mm\.mmap_sem)/\.mmap_lock = __RWSEM_INITIALIZER(efi_mm\.mmap_lock)/g' "$EFI_FILE"
-            echo "[+] efi.c a été patché avec succès pour utiliser mmap_lock."
+        echo "Application du correctif pour efi.c..."
+        if [ -f "drivers/firmware/efi/efi.c" ]; then
+            sed -i 's/\.mmap_sem\s*=\s*__RWSEM_INITIALIZER(efi_mm\.mmap_sem)/\.mmap_lock = __RWSEM_INITIALIZER(efi_mm\.mmap_lock)/g' drivers/firmware/efi/efi.c
         fi
 
-        # 14. Correctif de compatibilité KernelSU pour les noyaux plus anciens (MODULE_IMPORT_NS)
+        # 14. Correctif de compatibilité KernelSU (MODULE_IMPORT_NS)
         echo "Application du correctif pour KernelSU MODULE_IMPORT_NS..."
-        KSU_INIT_FILE="drivers/kernelsu/core/init.c"
-        if [ -f "$KSU_INIT_FILE" ]; then
-            sed -i '1i #ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif' "$KSU_INIT_FILE"
-            echo "[+] Patch de compatibilité appliqué sur init.c avec succès."
+        if [ -f "drivers/kernelsu/core/init.c" ]; then
+            sed -i '1i #ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif' drivers/kernelsu/core/init.c
         fi
 
-        # 15. Nettoyage du Makefile des DTS pour éviter le Segmentation Fault sur Bengal
-        echo "Nettoyage du Makefile des DTS pour contourner le Segfault Bengal..."
-        DTS_MAKEFILE="arch/arm64/boot/dts/vendor/qcom/Makefile"
-        if [ -f "$DTS_MAKEFILE" ]; then
-            sed -i '/bengal/d' "$DTS_MAKEFILE"
-            echo "[+] Références à bengal retirées du Makefile des DTS."
-        fi
-        
-        # 15.5 [CRUCIAL] Recalibrage du dossier KernelSU
-        echo "Vérification et déplacement des sources de KernelSU..."
-        # Si KernelSU a été cloné à la racine, on le déplace dans drivers/
-        if [ -d "kernelsu" ] && [ ! -d "drivers/kernelsu" ]; then
-            mv kernelsu drivers/kernelsu
-            echo "[+] KernelSU déplacé avec succès de la racine vers drivers/kernelsu"
+        # 15. Nettoyage du Makefile des DTS Bengal (Contournement Segfault)
+        if [ -f "arch/arm64/boot/dts/vendor/qcom/Makefile" ]; then
+            sed -i '/bengal/d' arch/arm64/boot/dts/vendor/qcom/Makefile
         fi
 
         # 16. Injection propre du Hook KernelSU pour Noyau NON-GKI (fs/open.c)
         echo "Application du patch de hooking précis Non-GKI (fs/open.c)..."
         if [ -f "fs/open.c" ]; then
-            sed -i '/ksu_handle_open/d' "fs/open.c"
-            sed -i '/int do_dentry_open(/,/^[}]/s/return 0;/{ extern int ksu_handle_open(struct file *file); ksu_handle_open(f); } return 0;/g' "fs/open.c"
+            sed -i '/int do_dentry_open(/,/^[}]/s/return 0;/{ extern int ksu_handle_open(struct file *file); ksu_handle_open(f); } return 0;/g' fs/open.c
         fi
 
         # 17. Injection globale des symboles VDSO32 manquants dans vdso.c
         if [ -f "arch/arm64/kernel/vdso.c" ]; then
-            sed -i '1i char vdso32_start[] = {};\nchar vdso32_end[] = {};' "arch/arm64/kernel/vdso.c"
+            sed -i '1i char vdso32_start[] = {};\nchar vdso32_end[] = {};' arch/arm64/kernel/vdso.c
         fi
 
         # 18. Stub complet pour TOUS les Vendor Hooks Android manquants (Base CIP/Lineage)
         echo "Génération des stubs de secours pour l'intégralité des Vendor Hooks..."
         if [ -f "kernel/trace/trace.c" ]; then
-            sed -i '/_tracepoint_android_vh_/d' "kernel/trace/trace.c"
-            echo -e '\n/* Secours Tracepoints GKI pour compilation Non-GKI */' >> "kernel/trace/trace.c"
-            echo 'struct tracepoint __tracepoint_android_vh_set_memory_ro;' >> "kernel/trace/trace.c"
-            echo 'struct tracepoint __tracepoint_android_vh_set_memory_x;' >> "kernel/trace/trace.c"
-            echo 'struct tracepoint __tracepoint_android_vh_check_file_open;' >> "kernel/trace/trace.c"
-            echo 'struct tracepoint __tracepoint_android_vh_check_mmap_file;' >> "kernel/trace/trace.c"
-            echo 'struct tracepoint __tracepoint_android_vh_set_memory_rw;' >> "kernel/trace/trace.c"
-            echo 'struct tracepoint __tracepoint_android_vh_set_memory_nx;' >> "kernel/trace/trace.c"
-            echo 'struct tracepoint __tracepoint_android_vh_check_bpf_syscall;' >> "kernel/trace/trace.c"
-            echo "[+] Les 7 tracepoints obsolètes ont été neutralisés."
+            sed -i '/_tracepoint_android_vh_/d' kernel/trace/trace.c
+            echo -e '\n/* Secours Tracepoints GKI pour compilation Non-GKI */' >> kernel/trace/trace.c
+            echo 'struct tracepoint __tracepoint_android_vh_set_memory_ro;' >> kernel/trace/trace.c
+            echo 'struct tracepoint __tracepoint_android_vh_set_memory_x;' >> kernel/trace/trace.c
+            echo 'struct tracepoint __tracepoint_android_vh_check_file_open;' >> kernel/trace/trace.c
+            echo 'struct tracepoint __tracepoint_android_vh_check_mmap_file;' >> kernel/trace/trace.c
+            echo 'struct tracepoint __tracepoint_android_vh_set_memory_rw;' >> kernel/trace/trace.c
+            echo 'struct tracepoint __tracepoint_android_vh_set_memory_nx;' >> kernel/trace/trace.c
+            echo 'struct tracepoint __tracepoint_android_vh_check_bpf_syscall;' >> kernel/trace/trace.c
         fi
 
-        # 19. Forcer l'inclusion de KernelSU dans le système de build principal
+        # 19. Forcer la liaison finale de KernelSU dans le Makefile principal des drivers
         echo "Liaison explicite de KernelSU dans le Makefile des drivers..."
         if [ -f "drivers/Makefile" ]; then
-            sed -i '/kernelsu/d' "drivers/Makefile" # On nettoie les doublons potentiels
-            echo "obj-y += kernelsu/" >> "drivers/Makefile"
-            echo "[+] KernelSU lié manuellement au drivers/Makefile"
+            echo "obj-y += kernelsu/" >> drivers/Makefile
+            echo "[+] Liaison validée."
         fi
         
     - name: Setup ccache
