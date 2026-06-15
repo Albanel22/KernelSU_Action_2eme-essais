@@ -322,9 +322,8 @@ jobs:
             echo "obj-y += kernelsu/" >> drivers/Makefile
             echo "[+] Liaison validée."
         fi
-        
-    env:
-      - name: Compile Kernel
+      
+      -name: Compile Kernel
       env:
         # Forçage global au niveau de l'environnement GitHub
         OBJCOPY: llvm-objcopy
