@@ -348,7 +348,7 @@ jobs:
         fi
         
         # 1. Génération de la configuration (Correction : Ajout de LD=ld.lld)
-        make -j$(nproc) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- CLANG_TRIPLE=aarch64-linux-gnu- CC=clang OBJCOPY=llvm-objcopy LD=ld.lld vendor/kona-perf_defconfig
+        make -j$(nproc) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- CLANG_TRIPLE=aarch64-linux-gnu- CC=clang OBJCOPY=llvm-objcopy LD=ld.lld kona-perf_defconfig
         
         # 2. Tentative de compilation rapide (Multi-cœurs)
         echo "========================================================="
