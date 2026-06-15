@@ -12,6 +12,7 @@ jobs:
       CCACHE_HARDLINK: "true"
     steps:
     - uses: actions/checkout@v4
+    
     - name: Prepare Configuration
       run: |
         CONFIG_ENV=$(grep -w "CONFIG_ENV" config.env | head -n 1 | cut -d "=" -f 2)
@@ -57,7 +58,6 @@ jobs:
             KSU_EXPECTED_HASH
             REMOVE_UNUSED_PACKAGES
         )
-
         for CONFIG in "${CONFIG_LIST[@]}"; do
             if [[ "$CONFIG" == "EXTRA_CMDS" || "$CONFIG" == "CUSTOM_CMDS" ]]; then
                 echo "$CONFIG=$(grep -w "$CONFIG" "$CONFIG_ENV" | head -n 1 | cut -d ":" -f 2)" >> $GITHUB_ENV
@@ -67,7 +67,7 @@ jobs:
         done
 
     - name: Remove unused packages
-      if: env.REMOVE_UNUSED_PACKAGES ==false
+      if: env.REMOVE_UNUSED_PACKAGES == false
       uses: jlumbroso/free-disk-space@main
       with:
         tool-cache: true
@@ -127,11 +127,9 @@ jobs:
             tar -C gcc-64/ -zxvf gcc-aarch64.tar.gz
             echo "GCC_64=CROSS_COMPILE=$GITHUB_WORKSPACE/kernel_workspace/gcc-64/bin/aarch64-linux-android-" >> $GITHUB_ENV
         fi
-
         if [ "${{ env.ENABLE_GCC_ARM32 }}" = "true" ]; then
             mkdir gcc-32
-            wget -O gcc-arm.tar.gz https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/+archive/refs/tags/android-12.1.0_r27.tar.gz
-            tar -C gcc-32/ -zxvf gcc-arm.tar.gz
+            wget -O gcc-arm.tar.gz https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/+archive/refs/tags/android-12.1.0_r27.tar.gz            tar -C gcc-32/ -zxvf gcc-arm.tar.gz
             echo "GCC_32=CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/kernel_workspace/gcc-32/bin/arm-linux-androideabi-" >> $GITHUB_ENV
         fi
 
@@ -155,7 +153,6 @@ jobs:
           fi
           echo "GCC_64=CROSS_COMPILE=$GITHUB_WORKSPACE/kernel_workspace/gcc-64/bin/${{ env.CUSTOM_GCC_64_BIN }}" >> $GITHUB_ENV
         fi
-
         if [ "${{ env.USE_CUSTOM_GCC_32 }}" = "true" ]; then
           if [[ ${{ env.CUSTOM_GCC_32_SOURCE }} =~ git ]]; then
               if [[ ${{ env.CUSTOM_GCC_32_SOURCE }} == *'.tar.gz' ]]; then
@@ -202,37 +199,29 @@ jobs:
     - name: Setup KernelSU Version
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        
-        # Vérification si le dossier KernelSU existe, sinon on le clone proprement
         if [ ! -d "KernelSU" ]; then
             echo "[!] Dossier KernelSU introuvable, clonage manuel en cours..."
             git clone https://github.com/tiann/KernelSU.git KernelSU
         fi
-        
-        # Application de la version stable v0.9.5
         cd KernelSU
         git fetch --tags
         git checkout v0.9.5
         echo "[+] Version de KernelSU verrouillée avec succès sur la v0.9.5 !"
-        
+
     - name: Setup Configuration for Kernel
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         
-        # [CRUCIAL] Nettoyage complet des résidus
         echo "Nettoyage des résidus des builds précédents..."
         rm -rf kernelsu drivers/kernelsu
         
-        # Réparation des Makefiles originaux si altérés localement
         git checkout -- arch/arm64/kernel/vdso/Makefile 2>/dev/null || true
         git checkout -- arch/arm64/kernel/vdso32/Makefile 2>/dev/null || true
         git checkout -- arch/arm64/Makefile 2>/dev/null || true
 
-        # [FORCAGE] Clonage propre de KernelSU v0.9.5 au bon endroit
         echo "Téléchargement propre de KernelSU v0.9.5 dans drivers/kernelsu..."
         git clone https://github.com/tiann/KernelSU.git -b v0.9.5 drivers/kernelsu
 
-        # [RECONSTRUCTION PATH CONFIG] Liaison de la configuration Kona (SM8250)
         echo "Configuration du defconfig Kona pour processeur SM8250..."
         if [ -f "arch/arm64/configs/vendor/kona-perf_defconfig" ]; then
             mkdir -p arch/arm64/configs/vendor
@@ -243,57 +232,37 @@ jobs:
             exit 1
         fi
 
-        # Injection de secours MODULE_IMPORT_NS pour KernelSU
         if [ -f "drivers/kernelsu/core/init.c" ]; then
             sed -i '1i #ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif' drivers/kernelsu/core/init.c
         fi
 
-        # Injection du Hook KernelSU (fs/open.c)
         if [ -f "fs/open.c" ]; then
             sed -i '/int do_dentry_open(/,/^[}]/s/return 0;/{ extern int ksu_handle_open(struct file *file); ksu_handle_open(f); } return 0;/g' fs/open.c
         fi
 
-        # Forcer l'inclusion de KernelSU dans les drivers
         if [ -f "drivers/Makefile" ]; then
             sed -i '/kernelsu/d' drivers/Makefile
             echo "obj-y += kernelsu/" >> drivers/Makefile
         fi
 
-        # 12. Injection des macros de secours VDSO32 au début de signal32.c
         echo "Application du patch de compatibilité absolue pour signal32.c..."
         if [ -f "arch/arm64/kernel/signal32.c" ]; then
             sed -i '1i #define vdso_offset_compat_rt_sigreturn_thumb 0\n#define vdso_offset_compat_rt_sigreturn_arm 0\n#define vdso_offset_compat_sigreturn_thumb 0\n#define vdso_offset_compat_sigreturn_arm 0\n#define VDSO_LBASE 0' arch/arm64/kernel/signal32.c
         fi
 
-        # 13. Correctif pour l'erreur EFI mmap_sem -> mmap_lock
         echo "Application du correctif pour efi.c..."
         if [ -f "drivers/firmware/efi/efi.c" ]; then
             sed -i 's/\.mmap_sem\s*=\s*__RWSEM_INITIALIZER(efi_mm\.mmap_sem)/\.mmap_lock = __RWSEM_INITIALIZER(efi_mm\.mmap_lock)/g' drivers/firmware/efi/efi.c
         fi
 
-        # 14. Correctif de compatibilité KernelSU (MODULE_IMPORT_NS)
-        echo "Application du correctif pour KernelSU MODULE_IMPORT_NS..."
-        if [ -f "drivers/kernelsu/core/init.c" ]; then
-            sed -i '1i #ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif' drivers/kernelsu/core/init.c
-        fi
-
-        # 15. Nettoyage du Makefile des DTS Bengal (Contournement Segfault)
         if [ -f "arch/arm64/boot/dts/vendor/qcom/Makefile" ]; then
             sed -i '/bengal/d' arch/arm64/boot/dts/vendor/qcom/Makefile
         fi
 
-        # 16. Injection propre du Hook KernelSU pour Noyau NON-GKI (fs/open.c)
-        echo "Application du patch de hooking précis Non-GKI (fs/open.c)..."
-        if [ -f "fs/open.c" ]; then
-            sed -i '/int do_dentry_open(/,/^[}]/s/return 0;/{ extern int ksu_handle_open(struct file *file); ksu_handle_open(f); } return 0;/g' fs/open.c
-        fi
-
-        # 17. Injection globale des symboles VDSO32 manquants dans vdso.c
         if [ -f "arch/arm64/kernel/vdso.c" ]; then
             sed -i '1i char vdso32_start[] = {};\nchar vdso32_end[] = {};' arch/arm64/kernel/vdso.c
         fi
 
-        # 18. Stub complet pour TOUS les Vendor Hooks Android manquants (Base CIP/Lineage)
         echo "Génération des stubs de secours pour l'intégralité des Vendor Hooks..."
         if [ -f "kernel/trace/trace.c" ]; then
             sed -i '/_tracepoint_android_vh_/d' kernel/trace/trace.c
@@ -307,7 +276,6 @@ jobs:
             echo 'struct tracepoint __tracepoint_android_vh_check_bpf_syscall;' >> kernel/trace/trace.c
         fi
 
-        # 18.5 Neutralisation sécurisée du VDSO (Vidage des instructions de build)
         echo "Neutralisation propre du contenu du Makefile VDSO..."
         if [ -f "arch/arm64/kernel/vdso/Makefile" ]; then
             echo "# Contenu vidé pour contourner l'erreur objcopy" > arch/arm64/kernel/vdso/Makefile
@@ -316,16 +284,8 @@ jobs:
             echo "# Contenu vidé pour contourner l'erreur objcopy32" > arch/arm64/kernel/vdso32/Makefile
         fi
 
-        # 19. Forcer la liaison finale de KernelSU dans le Makefile principal des drivers
-        echo "Liaison explicite de KernelSU dans le Makefile des drivers..."
-        if [ -f "drivers/Makefile" ]; then
-            echo "obj-y += kernelsu/" >> drivers/Makefile
-            echo "[+] Liaison validée."
-        fi
-      
-      -name: Compile Kernel
+    - name: Compile Kernel
       env:
-        # Forçage global au niveau de l'environnement GitHub
         OBJCOPY: llvm-objcopy
         STRIP: llvm-strip
       run: |
@@ -333,16 +293,14 @@ jobs:
         export PATH=$GITHUB_WORKSPACE/kernel_workspace/clang-aosp/bin:$PATH
         export KBUILD_BUILD_HOST=Github-Action
         export KBUILD_BUILD_USER=$(echo ${{ github.actor }} | tr A-Z a-z)
-        
+                
         if [ ! -z "${{ env.KSU_EXPECTED_SIZE }}" ] && [ ! -z "${{ env.KSU_EXPECTED_HASH }}" ]; then
           export KSU_EXPECTED_SIZE=${{ env.KSU_EXPECTED_SIZE }}
           export KSU_EXPECTED_HASH=${{ env.KSU_EXPECTED_HASH }}
         fi
-        
-        # 1. Génération de la configuration (Correction : suppression du 'run:|' en trop)
+                
         make -j$(nproc) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- CLANG_TRIPLE=aarch64-linux-gnu- CC=clang OBJCOPY=llvm-objcopy
-        
-        # 2. Tentative de compilation rapide (Multi-cœurs)
+                
         echo "========================================================="
         echo " Lancement de la compilation principale (Multi-cœurs) "
         echo "========================================================="
@@ -352,7 +310,6 @@ jobs:
             make -j$(nproc --all) CC=clang CLANG_TRIPLE=aarch64-linux-gnu- OBJCOPY=llvm-objcopy STRIP=llvm-strip O=out ARCH=${{ env.ARCH }} ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }} || MULTI_FAILED=true
         fi
 
-        # 3. Mode Secours (Mono-cœur) pour isoler l'erreur si échec
         if [ "$MULTI_FAILED" = "true" ]; then
             echo "========================================================="
             echo " Échec détecté ! Relance en mode mono-cœur (-j1) pour "
@@ -365,9 +322,9 @@ jobs:
             fi
         fi
 
-        -name: Make Anykernel3
-        if: env.CHECK_FILE_IS_OK == 'true' && env.USE_CUSTOM_ANYKERNEL3 != 'true'
-        run:|
+    - name: Make Anykernel3
+      if: env.CHECK_FILE_IS_OK == 'true' && env.USE_CUSTOM_ANYKERNEL3 != 'true'
+      run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone https://github.com/osm0sis/AnyKernel3 --depth=1
         sed -i 's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
@@ -378,9 +335,9 @@ jobs:
             cp android-kernel/out/arch/${{ env.ARCH }}/boot/dtbo.img AnyKernel3/
         fi
         rm -rf AnyKernel3/.git* AnyKernel3/README.md
-        
-       -name: Make Custom-Anykernel3
-       if: env.CHECK_FILE_IS_OK == 'true' && env.USE_CUSTOM_ANYKERNEL3 == 'true'
+
+    - name: Make Custom-Anykernel3
+      if: env.CHECK_FILE_IS_OK == 'true' && env.USE_CUSTOM_ANYKERNEL3 == 'true'
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         if [[ ${{ env.CUSTOM_ANYKERNEL3_SOURCE }} =~ git ]]; then
